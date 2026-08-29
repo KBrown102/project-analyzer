@@ -252,7 +252,7 @@
         { id:0, name:"总览",   re:/README|OVERVIEW|总览|概览/i },
         { id:1, name:"约定",   re:/(^|\/)(rules|规范|约定)\/|结构约定|CONVENTIONS|约定文档/i },
         { id:2, name:"内容资产", re:/(^|\/)(references|docs|knowledge|design|resources|sources)\//i },
-        { id:3, name:"工具化", re:/(^|\/)(tools|scripts)\//i },
+        { id:3, name:"工具化", re:/(^|\/)(tools|scripts)\/|\.(cjs|mjs)$/i },
         { id:4, name:"自检",   re:/(^|\/)(tests|test)\/|audit|smoke|check|lint|校验/i }
       ],
       artifacts:[
@@ -260,7 +260,7 @@
         { key:"OVERVIEW", label:"项目总览",    re:/OVERVIEW|总览|概览|PROJECT_OVERVIEW/i },
         { key:"CONV",     label:"约定文档",    re:/约定|CONVENTIONS|(^|\/)rules\/|规范/i },
         { key:"INDEX",    label:"索引 / 目录", re:/INDEX|索引|目录\.md|README\.md$/i },
-        { key:"TOOL",     label:"工具脚本",    re:/(^|\/)(tools|scripts)\//i },
+        { key:"TOOL",     label:"工具脚本",    re:/(^|\/)(tools|scripts)\/|\.(cjs|mjs)$/i },
         { key:"TEST",     label:"自检脚本",    re:/(^|\/)(tests|test)\/|audit|smoke|check/i },
         { key:"CI",       label:"CI 配置",     re:RE_CI }
       ],
@@ -360,10 +360,15 @@
     }
     if (isLib && !anyPath(paths, /(^|\/)(pages|views|routes|public)\//i)) return "lib";
 
-    // Web 应用
-    if (/HTML5|静态网站|前端|Node/i.test(type)) return "web";
-    if (anyPath(paths, /(^|\/)(pages|views|components|routes|app)\//i)) return "web";
+    // Web 应用：必须有页面结构或前端框架特征。
+    // 只凭 detectType 里的 "Node" 不够——Electron 工具、CLI 也会有 package.json。
+    if (anyPath(paths, /(^|\/)(pages|views|routes|public)\//i)) return "web";
     if (anyPath(paths, /\.(tsx|jsx|vue|svelte)$/i)) return "web";
+    // 注意：assets/ 不能当 Web 特征，桌面工具的图标也放这里
+    if (/HTML5|静态网站|前端/i.test(type) && anyPath(paths, /(^|\/)(components|styles|static)\//i)) return "web";
+
+    // 内部工具：带 bat / sh 启动脚本的桌面或命令行工具
+    if (anyPath(paths, /\.(bat|sh)$/i) && !anyPath(paths, /(^|\/)(pages|views|routes)\//i)) return "tool";
 
     if (/Python|Java|Rust/i.test(type)) return srcN > 8 ? "lib" : "tool";
     return "generic";
