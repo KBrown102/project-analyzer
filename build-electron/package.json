@@ -30,10 +30,10 @@
           "arch": ["x64"]
         }
       ],
-      "artifactName": "项目结构分析器-${version}.${ext}"
+      "artifactName": "project-analyzer-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "项目结构分析器-${version}.${ext}"
+      "artifactName": "project-analyzer-${version}.${ext}"
     }
   },
   "devDependencies": {
