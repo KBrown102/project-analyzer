@@ -39,19 +39,58 @@
 ## 文件说明
 
 ```
-tools/
+项目结构分析器-1.0.0/
 ├── project-analyzer.html     分析器本体，单文件零依赖
+├── package.json              测试与同步脚本入口
 ├── build-desktop.bat         建桌面快捷方式（VBScript 方式）
 ├── build-desktop-ps.bat      建桌面快捷方式（PowerShell 方式）
 ├── build-exe-electron.bat    打包成独立 exe
+├── run-local-electron.bat    不打包，直接起 Electron 预览
 ├── clean-build.bat           清理打包产物与全局缓存
 ├── assets/                   图标 icon.ico / icon.png 与生成脚本 make-icon.py
 ├── build-electron/           Electron 打包用目录
 │   ├── main.js               窗口入口
 │   ├── package.json          打包配置
-│   └── dist-out/             打包产物（exe 在这里面）
-└── launcher.vbs              建快捷方式时临时生成的脚本
+│   ├── project-analyzer.html 根文件的副本（改完根文件要同步，见下）
+│   └── dist-out/             打包产物（exe 在这里面，已 gitignore）
+├── scripts/
+│   └── sync-electron.mjs     把根 html 同步到 build-electron/
+└── tests/
+    ├── smoke.test.mjs        文件与资产检查（静态断言）
+    ├── logic.test.mjs        分析逻辑行为测试（真跑 analyze）
+    └── _harness.mjs          把 <script> 抽出来在 Node vm 里执行的加载器
 ```
+
+`launcher.vbs` 是建桌面快捷方式时临时生成的，用完即弃，已加进 `.gitignore`。
+
+## 改代码之后
+
+分析器是单文件，改完 `project-analyzer.html` 直接刷新浏览器就能看效果，没有构建步骤。但有两件事别忘了：
+
+```bash
+npm test          # smoke + logic，130+ 项断言
+npm run sync      # 把根 html 同步到 build-electron/，否则打出来的是旧版
+```
+
+`npm test` 里的 `logic` 会检查两份 html 是否一致，忘了同步会直接失败。
+
+## 测试是怎么测的
+
+`tests/_harness.mjs` 把 `project-analyzer.html` 里的 `<script>` 块抽出来，在 Node 的 `vm` 里配上假的 `document` / `window` 跑一遍，拿到脚本自己暴露的 `window.__PA`，然后喂假目录进去做真实断言——不是对着源码字符串数数。
+
+覆盖的内容：
+
+- 七套模板各造一个假项目，断言能被自动识别成对应的那套
+- 项目类型识别（Godot / 前端工程 / Python / 规则仓库 / HTML5 / 未识别）
+- 阶段链推进（哪个阶段完成、`lastDone` / `cur` 落在哪、已完成阶段必带证据）
+- 产物清单，含 `neg` 项语义（命中＝缺失，比如引了 CDN 就算「非零外部依赖」）
+- 强制换模板与 `buildData` 不重读文件直接重算
+- 七套 `advice*()` 的字段完整性、优先级排序、无重复
+- 噪声目录过滤（`node_modules` / `.git` / `dist` 等）
+- 畸形输入不抛异常（非法 JSON 的 package.json、中文与空格路径、无扩展名文件）
+- 7 个假项目 × 7 套模板 = 49 个交叉组合全部跑通
+
+这套测试用变异测试验过有效性：故意把游戏判定、噪声正则、类型识别、`neg` 语义、优先级排序这 5 处分别改坏，5 个全部被抓到。
 
 ## 它需要什么
 
