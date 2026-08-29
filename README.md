@@ -1,6 +1,6 @@
-# Claw 工具集
+# 项目结构分析器
 
-项目结构分析器，以及把它变成桌面快捷方式 / 独立 exe 的打包脚本。
+一个独立的本地工具项目：读取你选的项目目录，判断它是什么类型、流程卡在哪一步、缺哪些关键文件，并给出下一步建议。也附带把它变成桌面快捷方式 / 独立 exe 的打包脚本。
 
 ## 这个工具干什么
 
@@ -53,6 +53,8 @@
 │   ├── package.json          打包配置
 │   ├── project-analyzer.html 根文件的副本（改完根文件要同步，见下）
 │   └── dist-out/             打包产物（exe 在这里面，已 gitignore）
+├── docs/
+│   └── config.md             配置说明
 ├── scripts/
 │   └── sync-electron.mjs     把根 html 同步到 build-electron/
 └── tests/
