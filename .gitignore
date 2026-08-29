@@ -2,6 +2,8 @@
 node_modules/
 build-electron/node_modules/
 build-electron/dist-out/
+# 本地打包时才生成；CI 不装这边依赖，入库只会白占 189KB
+build-electron/package-lock.json
 
 # 建快捷方式时临时生成的脚本
 launcher.vbs
