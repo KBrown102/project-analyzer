@@ -1,0 +1,12 @@
+# 依赖与打包产物
+node_modules/
+build-electron/node_modules/
+build-electron/dist-out/
+
+# 建快捷方式时临时生成的脚本
+launcher.vbs
+
+# 杂项
+*.log
+.DS_Store
+Thumbs.db

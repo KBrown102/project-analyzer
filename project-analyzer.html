@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目结构分析器 · Project Analyzer</title>
+<style>
+  :root{
+    --bg:#16181c; --panel:#1e2126; --panel2:#252930; --line:#33383f;
+    --tx:#e6e8ea; --tx2:#9aa3ad; --tx3:#6b7480;
+    --ok:#5DCAA5; --okbg:#0F6E56; --warn:#EF9F27; --warnbg:#633806; --miss:#3a4048;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:28px 24px 60px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;font-weight:500;margin-bottom:6px}
+  .sub{color:var(--tx2);font-size:13px;margin-bottom:24px}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+  button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-family:inherit}
+  button:hover{border-color:var(--ok);color:var(--ok)}
+  button.on{background:var(--okbg);border-color:var(--ok);color:#fff}
+  .mode{margin-left:auto;display:flex;gap:6px;background:var(--panel);padding:4px;border-radius:9px;border:1px solid var(--line)}
+  .mode button{border:none;background:none;padding:6px 14px}
+  .mode button.on{background:var(--panel2)}
+  .pwrap{display:flex;align-items:center;gap:7px;background:var(--panel);padding:5px 10px;border-radius:9px;border:1px solid var(--line)}
+  .pwrap label{font-size:12px;color:var(--tx3)}
+  .pwrap select{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;cursor:pointer}
+  .pwrap select:hover{border-color:var(--ok)}
+  .ptag{display:inline-block;background:var(--okbg);border:1px solid var(--ok);color:#fff;border-radius:5px;padding:2px 8px;font-size:11px;margin:0 5px 5px 0}
+  .slot{border:1px dashed var(--line);border-radius:10px;padding:13px 16px;margin-bottom:14px;color:var(--tx3);font-size:13px}
+  .slot.loaded{border-style:solid;border-color:var(--ok);color:var(--tx);background:var(--panel)}
+  .slot b{color:var(--tx);font-weight:500}
+  .grid{display:grid;gap:16px}
+  .grid.two{grid-template-columns:1fr 1fr}
+  @media(max-width:860px){.grid.two{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card.diff{border-color:var(--warn);box-shadow:0 0 0 1px rgba(239,159,39,.18)}
+  .cname{font-size:16px;font-weight:500;margin-bottom:3px}
+  .cmeta{color:var(--tx2);font-size:12px;margin-bottom:16px}
+  .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-size:11px;color:var(--tx2);margin:0 5px 5px 0}
+  .tag.hi{border-color:var(--ok);color:var(--ok)}
+  h3{font-size:13px;font-weight:500;color:var(--tx2);margin:18px 0 10px;letter-spacing:.3px}
+  h3:first-child{margin-top:0}
+  .phases{display:flex;gap:4px}
+  .ph{flex:1;text-align:center}
+  .phbox{height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;border:1px solid var(--line);background:var(--panel2);color:var(--tx3)}
+  .phbox.done{background:var(--okbg);border-color:var(--ok);color:#c8f0e4}
+  .phbox.cur{background:var(--warnbg);border-color:var(--warn);color:#f7d9a8}
+  .phlbl{font-size:10px;color:var(--tx3);margin-top:4px}
+  .row{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--miss)}
+  .dot.ok{background:var(--ok)}
+  .dot.no{background:transparent;border:1.5px solid var(--tx3)}
+  .row span.n{color:var(--tx2)}
+  .row .v{margin-left:auto;color:var(--tx3);font-size:12px}
+  .gaps{margin-top:14px;padding:12px 14px;background:rgba(239,159,39,.08);border-left:2px solid var(--warn);border-radius:0 8px 8px 0;font-size:12.5px;color:#e8d3b0}
+  .gaps b{color:var(--warn);font-weight:500}
+  .gaps ul{margin:6px 0 0 16px}
+  .gaps li{margin:2px 0}
+  .empty{color:var(--tx3);font-size:13px;padding:8px 0}
+  .intro{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:13px 15px}
+  .ititle{font-size:15px;font-weight:500;margin-bottom:5px}
+  .ibody{color:var(--tx2);font-size:12.5px;line-height:1.7}
+  .isrc{color:var(--tx3);font-size:11.5px;margin-top:8px}
+  .isrc b{color:var(--tx2);font-weight:500}
+  .mods{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+  .mods .row{padding:2px 0;font-size:12px}
+  .adv{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 14px;margin-bottom:8px}
+  .adv .ah{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px}
+  .adv .ah b{font-weight:500;font-size:13.5px}
+  .pri{font-size:10.5px;padding:1px 7px;border-radius:4px;font-weight:500;flex:none}
+  .pri.P0{background:#7a2a2a;color:#ffc9c9}
+  .pri.P1{background:var(--warnbg);color:#f7d9a8}
+  .pri.P2{background:#2a3a4a;color:#b8d4ea}
+  .pri.P3{background:var(--panel);color:var(--tx3)}
+  .atag{font-size:11px;color:var(--tx3);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+  .adetail{color:var(--tx2);font-size:12.5px;line-height:1.65}
+  .awhy{color:var(--tx3);font-size:11.5px;margin-top:4px}
+  .note{color:var(--tx3);font-size:12px;margin-top:22px;line-height:1.7}
+  .cmp{margin-top:18px}
+  .cmp .row{border-bottom:1px solid var(--line);padding:8px 0}
+  .cmp .row:last-child{border:none}
+  .cmp .k{width:150px;color:var(--tx2);flex:none}
+  .cmp .a,.cmp .b{flex:1;font-size:12.5px}
+  .cmp .a{color:var(--tx)}
+  .cmp .b{color:var(--tx)}
+  .cmp .diffmark{color:var(--warn);font-size:11px;margin-left:6px}
+  .head-row{display:flex;font-size:12px;color:var(--tx3);padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .head-row .k{width:150px;flex:none}
+  .head-row .a,.head-row .b{flex:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>项目结构分析器</h1>
+  <div class="sub">选择本地项目目录，按 CCGS 结构（阶段 / 产物 / 工程化）自动分析并出图；加载第二个项目可并排对比。纯本地运行，文件不会上传到任何地方。</div>
+
+  <div class="bar">
+    <button id="btnA">选择项目 A</button>
+    <button id="btnB">选择项目 B（对比用）</button>
+    <button id="btnClear">清空</button>
+    <div class="mode">
+      <button id="mSingle" class="on">单项目</button>
+      <button id="mCompare">对比</button>
+    </div>
+    <div class="pwrap">
+      <label for="selProfile">分析模板</label>
+      <select id="selProfile"><option value="">自动识别</option></select>
+    </div>
+  </div>
+
+  <div class="slot" id="slotA">项目 A：未选择</div>
+  <div class="slot" id="slotB">项目 B：未选择（对比模式需要）</div>
+
+  <div id="out"></div>
+
+  <div class="note">
+    说明：目录读取用的是 <code>&lt;input webkitdirectory&gt;</code>，直接在本地浏览器完成，无需起服务器，也不会联网。
+    会自动跳过 node_modules / .git / dist 等噪音目录；只读取文本文档的内容用于识别（最多 250 个、单个小于 300KB），二进制与大型文件只统计不读内容。
+  </div>
+</div>
+
+<input type="file" id="fa" webkitdirectory directory multiple style="display:none">
+<input type="file" id="fb" webkitdirectory directory multiple style="display:none">
+
+<script>
+(function(){
+  "use strict";
+  var NOISE = /(^|\/)(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release)(\/|$)/;
+  var TEXT_RE = /\.(md|markdown|json|ya?ml|txt|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i;
+  var MAX_TEXTS = 250, MAX_SIZE = 300 * 1024;
+
+  var A = null, B = null, mode = "single";
+  var CACHE = {};
+
+  var RE_TEST = /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\.|test-strategy/i;
+  var RE_CI   = /\.github\/workflows|gitlab-ci|\.gitlab-ci|azure-pipelines|Jenkinsfile/i;
+  var RE_DOC  = /README/i;
+  var RE_SRC  = /\.(js|mjs|cjs|jsx|ts|tsx|py|java|kt|cs|rs|go|rb|php|c|cpp|h|lua|gd|swift)$/i;
+
+  // —— 分析模板：项目形态不同，该问的问题也不同 ——
+  var PROFILES = {
+    game: {
+      id:"game", name:"游戏项目", tag:"CCGS 八阶段",
+      phases:[
+        { id:0, name:"诊断",   re:/STUDIO_OVERVIEW|诊断|audit|现状盘点|复盘/i },
+        { id:1, name:"概念",   re:/concept|概念|pitch|立项/i },
+        { id:2, name:"系统设计", re:/gdd|系统设计/i },
+        { id:3, name:"技术搭建", re:/architect|adr|架构|技术方案/i },
+        { id:4, name:"预制作", re:/ux-spec|ux[_-]?design|art-bible|asset-spec|epics|预[制製]作|原型/i },
+        { id:5, name:"制作",   re:/sprint|production\/|src\//i },
+        { id:6, name:"打磨",   re:/balance|perf|polish|打磨|优化报告|playtest/i },
+        { id:7, name:"发布",   re:/release|changelog|launch|发布|部署/i }
+      ],
+      artifacts:[
+        { key:"GDD",  label:"设计文档 GDD", re:/design\/gdd\/.+\.md$|gdd/i },
+        { key:"ADR",  label:"架构决策 ADR", re:/adr/i },
+        { key:"ARCH", label:"架构文档",     re:/architect/i },
+        { key:"UX",   label:"UX 规范",      re:/ux-spec|ux[_-]?design/i },
+        { key:"ART",  label:"美术规范",     re:/art-bible|asset-spec|art\//i },
+        { key:"PLAN", label:"迭代 / 冲刺计划", re:/sprint|epics|roadmap|计划/i },
+        { key:"TEST", label:"测试",         re:RE_TEST },
+        { key:"CI",   label:"CI 配置",      re:RE_CI },
+        { key:"DOC",  label:"说明文档",     re:RE_DOC }
+      ],
+      advice: adviceGame
+    },
+
+    web: {
+      id:"web", name:"Web 应用", tag:"需求到部署",
+      phases:[
+        { id:0, name:"需求",   re:/requirement|需求|prd|产品需求/i },
+        { id:1, name:"设计",   re:/(^|\/)design\/|原型|wireframe|ui-spec|设计稿/i },
+        { id:2, name:"实现",   re:/src\/|components?\/|pages?\/|views?\/|app\//i },
+        { id:3, name:"构建部署", re:/deploy|Dockerfile|vercel|netlify|nginx|workflows/i },
+        { id:4, name:"监控迭代", re:/monitor|sentry|analytics|埋点|CHANGELOG|迭代/i }
+      ],
+      artifacts:[
+        { key:"README", label:"README",     re:RE_DOC },
+        { key:"ENV",    label:"环境变量示例", re:/\.env\.(example|sample)/i },
+        { key:"API",    label:"接口文档",    re:/api\.(md|ya?ml|json)$|swagger|openapi/i },
+        { key:"STYLE",  label:"样式规范",    re:/style-guide|design-token|tailwind\.config|theme\./i },
+        { key:"DEPLOY", label:"部署配置",    re:/Dockerfile|docker-compose|vercel\.json|netlify\.toml|\.github\/workflows/i },
+        { key:"TEST",   label:"测试",        re:RE_TEST },
+        { key:"CI",     label:"CI 配置",     re:RE_CI }
+      ],
+      advice: adviceWeb
+    },
+
+    lib: {
+      id:"lib", name:"库 / SDK", tag:"接口到发布",
+      phases:[
+        { id:0, name:"接口设计", re:/api|interface|\.d\.ts|类型定义/i },
+        { id:1, name:"实现",     re:/src\/|lib\//i },
+        { id:2, name:"文档",     re:/README|docs\/|\.md$/i },
+        { id:3, name:"示例",     re:/example|demo|samples/i },
+        { id:4, name:"发布",     re:/CHANGELOG|release|\.npmignore|publish/i }
+      ],
+      artifacts:[
+        { key:"README",    label:"README",     re:RE_DOC },
+        { key:"LICENSE",   label:"开源协议",    re:/LICENSE/i },
+        { key:"CHANGELOG", label:"变更日志",    re:/CHANGELOG/i },
+        { key:"API",       label:"API 文档",    re:/api\.(md|ya?ml|json)$|docs\/api|typedoc|jsdoc/i },
+        { key:"TYPE",      label:"类型定义",    re:/\.d\.ts$|types\//i },
+        { key:"EXAMPLE",   label:"示例 / demo", re:/example|demo|samples/i },
+        { key:"TEST",      label:"测试",        re:RE_TEST },
+        { key:"CI",        label:"CI 配置",     re:RE_CI }
+      ],
+      advice: adviceLib
+    },
+
+    mini: {
+      id:"mini", name:"小游戏 / 单文件作品", tag:"入口到闭环",
+      phases:[
+        { id:0, name:"入口", re:/(^|\/)index\.html$/i },
+        { id:1, name:"说明", tre:/怎么玩|玩法|操作说明|点击.*开始|拖动/i },
+        { id:2, name:"闭环", tre:/gameover|gameOver|结算|结束页|再来一次|重新开始|result/i },
+        { id:3, name:"分发", re:/manifest\.json|README/i }
+      ],
+      artifacts:[
+        { key:"ENTRY", label:"入口 index.html", re:/(^|\/)index\.html$/i },
+        { key:"INTRO", label:"开始页说明",      tre:/怎么玩|玩法|操作说明|点击.*开始|拖动/i },
+        { key:"LOOP",  label:"体验闭环",        tre:/gameover|gameOver|结算|结束页|再来一次|重新开始|result/i },
+        { key:"SELF",  label:"零外部依赖",      tre:/https?:\/\/(cdn|unpkg|jsdelivr|cdnjs|fonts\.googleapis)/i, neg:true },
+        { key:"PERF",  label:"帧率控制",        tre:/requestAnimationFrame/i },
+        { key:"RESP",  label:"移动端适配",      re:/viewport/i, tre:/viewport|touchstart|pointerdown/i }
+      ],
+      advice: adviceMini
+    },
+
+    tool: {
+      id:"tool", name:"内部工具", tag:"可用到分发",
+      phases:[
+        { id:0, name:"能用",   re:/\.(html|js|mjs|cjs|py|sh|bat)$/i },
+        { id:1, name:"说明",   re:/README|使用说明|用法|usage/i },
+        { id:2, name:"分发",   re:/\.(bat|sh|exe)$|package\.json|Makefile/i }
+      ],
+      artifacts:[
+        { key:"README", label:"README",   re:RE_DOC },
+        { key:"USAGE",  label:"使用说明",  re:/README|usage|使用说明|用法/i },
+        { key:"LAUNCH", label:"启动脚本",  re:/\.(bat|sh)$/i },
+        { key:"CONFIG", label:"配置说明",  re:/config|配置|\.env/i },
+        { key:"TEST",   label:"测试",      re:RE_TEST },
+        { key:"CI",     label:"CI 配置",   re:RE_CI }
+      ],
+      advice: adviceTool
+    },
+
+    meta: {
+      id:"meta", name:"元项目 / 规则库", tag:"约定到自检",
+      phases:[
+        { id:0, name:"总览",   re:/README|OVERVIEW|总览|概览/i },
+        { id:1, name:"约定",   re:/(^|\/)(rules|规范|约定)\/|结构约定|CONVENTIONS|约定文档/i },
+        { id:2, name:"内容资产", re:/(^|\/)(references|docs|knowledge|design|resources|sources)\//i },
+        { id:3, name:"工具化", re:/(^|\/)(tools|scripts)\//i },
+        { id:4, name:"自检",   re:/(^|\/)(tests|test)\/|audit|smoke|check|lint|校验/i }
+      ],
+      artifacts:[
+        { key:"README",   label:"README",     re:RE_DOC },
+        { key:"OVERVIEW", label:"项目总览",    re:/OVERVIEW|总览|概览|PROJECT_OVERVIEW/i },
+        { key:"CONV",     label:"约定文档",    re:/约定|CONVENTIONS|(^|\/)rules\/|规范/i },
+        { key:"INDEX",    label:"索引 / 目录", re:/INDEX|索引|目录\.md|README\.md$/i },
+        { key:"TOOL",     label:"工具脚本",    re:/(^|\/)(tools|scripts)\//i },
+        { key:"TEST",     label:"自检脚本",    re:/(^|\/)(tests|test)\/|audit|smoke|check/i },
+        { key:"CI",       label:"CI 配置",     re:RE_CI }
+      ],
+      advice: adviceMeta
+    },
+
+    generic: {
+      id:"generic", name:"通用项目", tag:"基础工程化",
+      phases:[
+        { id:0, name:"说明",   re:/README/i },
+        { id:1, name:"源码",   re:RE_SRC },
+        { id:2, name:"工程化", re:RE_CI },
+        { id:3, name:"发布",   re:/LICENSE|CHANGELOG|release/i }
+      ],
+      artifacts:[
+        { key:"README",  label:"README",   re:RE_DOC },
+        { key:"LICENSE", label:"开源协议",  re:/LICENSE/i },
+        { key:"TEST",    label:"测试",      re:RE_TEST },
+        { key:"CI",      label:"CI 配置",   re:RE_CI }
+      ],
+      advice: adviceGeneric
+    }
+  };
+
+  var PROFILE_ORDER = ["game","web","lib","mini","tool","meta","generic"];
+
+  function getProfile(id){ return PROFILES[id] || PROFILES.generic; }
+
+  function anyPath(paths, re){ for (var i=0;i<paths.length;i++){ if (re.test(paths[i])) return paths[i]; } return null; }
+  function countPath(paths, re){ var n=0; for (var i=0;i<paths.length;i++){ if (re.test(paths[i])) n++; } return n; }
+
+  function detectType(paths, texts){
+    var joined = texts.map(function(t){ return t.path + " " + t.text.slice(0, 400); }).join("\n").slice(0, 40000);
+    if (anyPath(paths, /project\.godot$/)) return "Godot 游戏";
+    if (anyPath(paths, /conf\.lua$/) && anyPath(paths, /main\.lua$/)) return "LÖVE 2D 游戏";
+    if (anyPath(paths, /ProjectSettings\//) || anyPath(paths, /\.unity$/)) return "Unity 项目";
+    if (anyPath(paths, /\.uproject$/)) return "Unreal 项目";
+    if (anyPath(paths, /(^|\/)\.claude\//)) return "Claude Code 项目";
+
+    // 规则 / 文档仓库：md 占多数且源码极少（要排在 Python / Node 之前判断）
+    var _n = paths.length || 1;
+    if (countPath(paths, /\.md$/i) / _n > 0.35 &&
+        countPath(paths, RE_SRC) / _n < 0.15 &&
+        countPath(paths, /\.md$/i) >= 3) return "规则 / 文档仓库";
+
+    if (anyPath(paths, /(^|\/)index\.html$/)) {
+      return /canvas|requestAnimationFrame|game|游戏/i.test(joined) ? "HTML5 网页项目" : "静态网站";
+    }
+    if (anyPath(paths, /package\.json$/)) {
+      return /three|canvas|phaser|pixi/i.test(joined) ? "Web 游戏工程" : "Node / 前端工程";
+    }
+    if (anyPath(paths, /requirements\.txt$|pyproject\.toml$|\.py$/)) return "Python 项目";
+    if (anyPath(paths, /\.java$|\.gradle$/)) return "Java / Android 项目";
+    if (anyPath(paths, /\.rs$|Cargo\.toml$/)) return "Rust 项目";
+    return "未识别类型";
+  }
+
+  // —— 判断该用哪套模板 ——
+  function detectProfile(paths, texts, type){
+    var n = paths.length || 1;
+    var mdN  = countPath(paths, /\.md$/i);
+    var srcN = countPath(paths, RE_SRC);
+    var mdR  = mdN / n, srcR = srcN / n;
+
+    if (/Godot|LÖVE|Unity|Unreal|游戏/i.test(type)) return "game";
+
+    // 元项目 / 规则库：文档为主、源码极少
+    if (mdR > 0.35 && srcR < 0.15 && mdN >= 3) return "meta";
+
+    // 小游戏 / 单文件交互作品：文件少、入口是 index.html、没有设计文档体系
+    var noDesign = !anyPath(paths, /(^|\/)(gdd|design|production|art)\//i);
+    if (paths.length <= 14 && noDesign && anyPath(paths, /(^|\/)index\.html$/i)){
+      var idxTxt = "";
+      for (var j=0;j<texts.length;j++){
+        if (/(^|\/)index\.html$/i.test(texts[j].path)){ idxTxt = texts[j].text; break; }
+      }
+      if (/canvas|requestAnimationFrame|game|游戏|互动|动画/i.test(idxTxt)) return "mini";
+      if (/game/i.test(paths.join(" "))) return "mini";
+      if (paths.length <= 6) return "mini";
+    }
+
+    // 内部工具：文件很少，或就一两个 html / 脚本
+    var singleHtml = paths.length <= 5 && anyPath(paths, /(^|\/)[^/]+\.html$/);
+    if (singleHtml || (paths.length <= 12 && srcR < 0.5 && mdN < 8)) return "tool";
+
+    // 库 / SDK：根级 package.json 暴露了入口或类型，且没有页面目录
+    // 只认根级（root/package.json），子目录里的打包配置不算数
+    var isLib = false;
+    for (var i=0;i<texts.length;i++){
+      if (!/package\.json$/i.test(texts[i].path)) continue;
+      if (texts[i].path.split("/").length > 2) continue;
+      try {
+        var pk = JSON.parse(texts[i].text);
+        if (pk.main || pk.exports || pk.types || pk.typings) isLib = true;
+      } catch(e){}
+      break;
+    }
+    if (isLib && !anyPath(paths, /(^|\/)(pages|views|routes|public)\//i)) return "lib";
+
+    // Web 应用
+    if (/HTML5|静态网站|前端|Node/i.test(type)) return "web";
+    if (anyPath(paths, /(^|\/)(pages|views|components|routes|app)\//i)) return "web";
+    if (anyPath(paths, /\.(tsx|jsx|vue|svelte)$/i)) return "web";
+
+    if (/Python|Java|Rust/i.test(type)) return srcN > 8 ? "lib" : "tool";
+    return "generic";
+  }
+
+  // 在 html 正文里找证据（用于「有没有结束页」这类只能看内容的问题）
+  function anyText(texts, tre){
+    for (var i=0;i<texts.length;i++){
+      if (/\.html?$/i.test(texts[i].path) && tre.test(texts[i].text)) return texts[i].path;
+    }
+    return null;
+  }
+
+  function detectPhases(paths, prof, texts){
+    var res = prof.phases.map(function(p){
+      var ev = p.re ? anyPath(paths, p.re) : null;
+      if (!ev && p.tre && texts) ev = anyText(texts, p.tre);
+      return { id:p.id, name:p.name, done: !!ev, evidence: ev };
+    });
+    // 当前阶段 = 最后一个已完成阶段的下一个
+    var lastDone = -1;
+    for (var i=0;i<res.length;i++){ if (res[i].done) lastDone = i; }
+    var cur = (lastDone + 1 < res.length) ? (lastDone + 1) : -1;
+    // 第一个未完成的若前面已完成，则标记为"进行中"
+    res.forEach(function(r, i){ r.cur = (i === cur && lastDone >= 0); });
+    return { list: res, lastDone: lastDone, cur: cur };
+  }
+
+  function detectArtifacts(paths, prof, texts){
+    return prof.artifacts.map(function(a){
+      var ev = a.re ? anyPath(paths, a.re) : null;
+      var n  = a.re ? countPath(paths, a.re) : 0;
+      if (a.tre && texts){
+        var tv = anyText(texts, a.tre);
+        if (tv){ ev = ev || tv; n = n || 1; }
+      }
+      // neg：命中代表「不该有的东西出现了」，所以命中即缺失
+      var has = a.neg ? !ev : !!ev;
+      return { key:a.key, label:a.label, has: has, count:n, evidence: ev };
+    });
+  }
+
+  function detectEngineering(paths, texts){
+    var pkg = null;
+    for (var i=0;i<texts.length;i++){
+      if (/package\.json$/.test(texts[i].path)) { try { pkg = JSON.parse(texts[i].text); } catch(e){} break; }
+    }
+    return {
+      ci: !!anyPath(paths, /\.github\/workflows|gitlab-ci|Jenkinsfile/i),
+      test: countPath(paths, /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\./i),
+      pkg: !!pkg,
+      scripts: pkg && pkg.scripts ? Object.keys(pkg.scripts) : [],
+      deps: pkg ? Object.keys(pkg.dependencies||{}).length : 0,
+      readme: !!anyPath(paths, /README/i),
+      license: !!anyPath(paths, /LICENSE/i)
+    };
+  }
+
+  function topExt(paths, n){
+    var m = {};
+    paths.forEach(function(p){
+      var ext = (p.split(".").pop() || "").toLowerCase();
+      if (ext && ext.length < 6) m[ext] = (m[ext]||0)+1;
+    });
+    return Object.keys(m).map(function(k){ return {ext:k, n:m[k]}; })
+      .sort(function(a,b){ return b.n - a.n; }).slice(0, n);
+  }
+
+  function readOne(f){
+    if (typeof f.text === "function") return f.text();
+    return new Promise(function(res, rej){
+      var r = new FileReader();
+      r.onload = function(){ res(String(r.result)); };
+      r.onerror = rej;
+      r.readAsText(f);
+    });
+  }
+
+  function readTexts(files){
+    var targets = files.filter(function(f){
+      return TEXT_RE.test(f.name) && f.size < MAX_SIZE;
+    }).slice(0, MAX_TEXTS);
+    var out = [];
+    return targets.reduce(function(chain, f){
+      return chain.then(function(){
+        return readOne(f).then(function(t){
+          out.push({ path:f.webkitRelativePath.replace(/\\/g,"/"), text:t });
+        }).catch(function(){});
+      });
+    }, Promise.resolve()).then(function(){ return out; });
+  }
+
+  function analyze(fileList, label, profileId){
+    var files = Array.prototype.slice.call(fileList)
+      .filter(function(f){ return !NOISE.test(f.webkitRelativePath.replace(/\\/g,"/")); });
+    if (!files.length) return Promise.resolve(null);
+    var root = files[0].webkitRelativePath.split(/[\\/]/)[0];
+    return readTexts(files).then(function(texts){
+      CACHE[label] = {
+        paths: files.map(function(f){ return f.webkitRelativePath.replace(/\\/g,"/"); }),
+        texts: texts,
+        root: root,
+        fileCount: files.length
+      };
+      return buildData(label, profileId);
+    });
+  }
+
+  // 换模板时不用重读文件，直接按原数据重算
+  function buildData(label, profileId){
+    var c = CACHE[label];
+    if (!c) return null;
+    var paths = c.paths, texts = c.texts;
+    var type = detectType(paths, texts);
+    var auto = detectProfile(paths, texts, type);
+    var pid  = profileId || auto;
+    var prof = getProfile(pid);
+
+    var d = {
+      label: label,
+      root: c.root,
+      name: c.root,
+      files: c.fileCount,
+      dirs: new Set(paths.map(function(p){ return p.split("/").slice(0,-1).join("/"); })).size,
+      exts: topExt(paths, 5),
+      profile: prof.id,
+      profileName: prof.name,
+      profileTag: prof.tag,
+      auto: auto,
+      type: type,
+      phases: detectPhases(paths, prof, texts),
+      artifacts: detectArtifacts(paths, prof, texts),
+      eng: detectEngineering(paths, texts)
+    };
+    d.has = {};
+    d.artifacts.forEach(function(a){ d.has[a.key] = a.has; });
+    d.intro = genIntro(paths, texts, type);
+    d.advice = prof.advice(d);
+    return d;
+  }
+
+  // —— 目录名 → 用途（用于无文档时从结构推断项目在干什么）——
+  var DIR_MEANING = {
+    design:"设计文档", docs:"技术文档", gdd:"系统设计", adr:"架构决策记录",
+    src:"源码", lib:"本地库", assets:"资源素材", art:"美术规范",
+    production:"项目管理", test:"测试", tests:"测试", spec:"测试", scripts:"脚本",
+    styles:"视觉风格", codex:"代码复用库", sources:"数据源", "web-hot":"热点数据",
+    "knowledge-base":"知识库", "classic-games":"经典基因库", "personal-taste":"爽感基因库",
+    "scraped-sites":"采集数据", tools:"工具", references:"参考库", rules:"规范",
+    product:"产品方向", tech:"技术方法库", ui:"界面", core:"核心逻辑", utils:"工具函数"
+  };
+
+  function inferModules(paths){
+    var seen = {};
+    paths.forEach(function(p){
+      var seg = p.split("/");
+      for (var i=1;i<seg.length-1;i++){
+        var d = seg[i].toLowerCase();
+        if (DIR_MEANING[d] && !seen[d]) seen[d] = { dir: seg.slice(0, i+1).join("/"), mean: DIR_MEANING[d], n: 0 };
+        if (seen[d]) seen[d].n++;
+      }
+    });
+    return Object.keys(seen).map(function(k){ return seen[k]; })
+      .sort(function(a,b){ return b.n - a.n; }).slice(0, 6);
+  }
+
+  // —— 项目介绍：有文档读文档，没文档靠代码推断 ——
+  function genIntro(paths, texts, type){
+    var doc = null;
+    var order = [/STUDIO_OVERVIEW/i, /OVERVIEW/i, /^README/i, /README/i, /concept/i, /简介/i, /ABOUT/i];
+    for (var oi=0; oi<order.length && !doc; oi++){
+      for (var i=0;i<texts.length;i++){
+        if (order[oi].test(texts[i].path) && texts[i].text.length > 60){ doc = texts[i]; break; }
+      }
+    }
+
+    var title = "", body = "", fromDoc = false, srcName = "";
+    if (doc){
+      fromDoc = true;
+      srcName = doc.path.split("/").pop();
+      var m = /^#\s+(.+)$/m.exec(doc.text);
+      if (m) title = m[1].replace(/[#*`]/g, "").trim();
+      var lines = doc.text.split(/\r?\n/), buf = [], collecting = false;
+      for (var li=0; li<lines.length; li++){
+        var ln = lines[li].trim();
+        if (li < 6 && /^---$/.test(ln)) continue;
+        if (!collecting){ if (/^#\s+/.test(ln)) collecting = true; continue; }
+        if (/^#{1,6}\s/.test(ln) || /^```/.test(ln) || /^\|/.test(ln) || /^---/.test(ln) || /^!\[/.test(ln)){
+          if (buf.length >= 2) break; else continue;
+        }
+        if (ln) buf.push(ln.replace(/[>*`]/g, "").trim());
+        if (buf.join("").length > 240) break;
+      }
+      body = buf.join(" ").slice(0, 240);
+    }
+
+    // 技术栈（从文件类型与依赖推断）
+    var tech = [];
+    if (anyPath(paths, /\.html?$/i)) tech.push("HTML");
+    if (anyPath(paths, /\.css$/i)) tech.push("CSS");
+    if (anyPath(paths, /\.(js|mjs|cjs)$/i)) tech.push("JavaScript");
+    if (anyPath(paths, /\.tsx?$/i)) tech.push("TypeScript");
+    if (anyPath(paths, /\.lua$/i)) tech.push("Lua");
+    if (anyPath(paths, /\.py$/i)) tech.push("Python");
+    if (anyPath(paths, /\.java$/i)) tech.push("Java");
+    if (anyPath(paths, /\.rs$/i)) tech.push("Rust");
+    if (anyPath(paths, /\.cs$/i)) tech.push("C#");
+    if (anyPath(paths, /three|pixi|phaser|babylon/i)) tech.push("WebGL 引擎");
+    if (anyPath(paths, /react|vue|svelte/i)) tech.push("前端框架");
+    if (anyPath(paths, /\.gd$/i)) tech.push("GDScript");
+
+    // 无文档时，从 package.json / 入口文件补线索
+    var infer = "";
+    if (!fromDoc){
+      for (var pi=0; pi<texts.length; pi++){
+        if (/package\.json$/i.test(texts[pi].path)){
+          try {
+            var pk = JSON.parse(texts[pi].text);
+            if (pk.description) infer = String(pk.description);
+            if (!title && pk.name) title = String(pk.name);
+          } catch(e){}
+          break;
+        }
+      }
+      if (!infer){
+        for (var hi=0; hi<texts.length; hi++){
+          if (/index\.html$/i.test(texts[hi].path)){
+            var tm = /<title>([^<]+)<\/title>/i.exec(texts[hi].text);
+            if (tm){ infer = "网页标题为「" + tm[1].trim() + "」"; if (!title) title = tm[1].trim(); }
+            break;
+          }
+        }
+      }
+    }
+
+    return {
+      title: title || "（未识别到项目名）",
+      body: body || infer || "",
+      fromDoc: fromDoc,
+      source: srcName,
+      tech: tech,
+      modules: inferModules(paths)
+    };
+  }
+
+  // —— 优化建议：每套模板问的问题不同 ——
+  var GAME_PHASE_FILE = {
+    0:"STUDIO_OVERVIEW.md —— 阶段盘点：现状、缺口、下一步",
+    1:"design/concept.md —— 三支柱 / 玩家幻想 / 范围分层 / 视觉锚点",
+    2:"design/gdd/00-overview.md + 各系统分册（规则 / 公式 / 边界 / 旋钮 / 验收）",
+    3:"docs/architecture/architecture.md + docs/architecture/adr/001-xxx.md",
+    4:"design/ux-spec.md + art/asset-spec.md + production/epics.md",
+    5:"production/sprint-01.md —— 首个冲刺计划与验收点",
+    6:"平衡与性能调优记录（balance / perf）",
+    7:"release-checklist.md + CHANGELOG.md"
+  };
+  var WEB_PHASE_FILE = {
+    0:"docs/requirement.md —— 要解决的问题、给谁用、明确不做什么",
+    1:"design/wireframe.md 或原型链接 —— 页面结构与信息层级",
+    2:"src/ 下按功能分模块的源码结构",
+    3:"Dockerfile 或 vercel.json + CI 里的部署步骤",
+    4:"监控 / 埋点方案 + CHANGELOG.md"
+  };
+  var LIB_PHASE_FILE = {
+    0:"docs/api.md 或 index.d.ts —— 公开接口先定稿再实现",
+    1:"src/ 源码实现",
+    2:"README.md + docs/ 使用文档",
+    3:"examples/ 最小可运行示例",
+    4:"CHANGELOG.md + 发布脚本"
+  };
+  var META_PHASE_FILE = {
+    0:"README.md —— 定位与入口",
+    1:"rules/ 或 约定文档 —— 把规矩写死",
+    2:"references/ docs/ —— 沉淀的内容资产",
+    3:"tools/ scripts/ —— 把规则变成可执行的工具",
+    4:"tests/ 或 audit 脚本 + CI —— 自检闭环"
+  };
+
+  function phaseGap(d, adv, maxId, fileMap, why){
+    d.phases.list.forEach(function(p){
+      if (!p.done && p.id <= maxId){
+        adv.push({
+          pri: p.id <= 2 ? "P1" : "P2", tag: "流程",
+          title: "补「" + p.name + "」阶段产物",
+          detail: fileMap[p.id] || "",
+          why: why
+        });
+      }
+    });
+  }
+
+  function sortAdv(adv){
+    var order = { P0:0, P1:1, P2:2, P3:3 };
+    adv.sort(function(a,b){ return order[a.pri] - order[b.pri]; });
+    return adv;
+  }
+
+  function adviceGame(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 4, GAME_PHASE_FILE, "阶段制里这一环缺了，后续设计与实现没有可依据的东西。");
+    if (!hasA.DOC) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：一句话定位 + 怎么跑起来 + 目录说明",
+      why:"别人（以及三个月后的你）打开项目第一个找的就是它。" });
+    if (!hasA.ART) adv.push({ pri:"P2", tag:"美术", title:"补美术规范",
+      detail:"art/art-bible.md（视觉身份）+ art/asset-spec.md（资产清单）",
+      why:"没有规范，后面加素材必然风格漂移。" });
+    if (!hasA.UX) adv.push({ pri:"P2", tag:"UX", title:"补 UX 规范",
+      detail:"design/ux-spec.md：核心循环 / 交互 / 信息层级 / 新手引导",
+      why:"交互没有书面约定，实现时各做各的，返工成本高。" });
+    if (!hasA.GDD) adv.push({ pri:"P1", tag:"设计", title:"写 GDD（游戏设计文档）",
+      detail:"design/gdd/ 按系统拆：概览 / 玩家幻想 / 详细规则 / 公式 / 边界情况 / 依赖 / 调参旋钮 / 验收标准",
+      why:"游戏没有 GDD，玩法细节只存在于脑子里，改一处牵全身。" });
+    if (!d.eng.ci && d.files > 12) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml：push / PR 触发，失败阻断合并",
+      why:"没有 CI，回归只能靠手工跑，且没人会记得跑。" });
+    if (!d.eng.test) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"tests/ 或 *.test.js：先覆盖核心逻辑与易错点，不追求全量覆盖",
+      why:"改代码时没有安全网，重构等于赌博。" });
+    if (d.eng.pkg && !d.eng.scripts.length) adv.push({ pri:"P3", tag:"工程化", title:"补 npm scripts",
+      detail:"package.json 里加 start / test / build，把常用命令固化下来",
+      why:"命令靠手敲，换台机器就记不全。" });
+    if (!hasA.PLAN && d.files > 20) adv.push({ pri:"P3", tag:"管理", title:"拆迭代计划",
+      detail:"production/epics.md + sprint-01.md：Epic / Story 拆分并标注就绪度",
+      why:"项目一大就容易陷在细节里，看不到整体进度。" });
+    return sortAdv(adv);
+  }
+
+  function adviceWeb(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 3, WEB_PHASE_FILE, "Web 项目这条链缺了，接手的人只能靠猜。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：定位 + 本地启动步骤 + 需要哪些环境变量 + 目录说明",
+      why:"Web 项目换台机器就跑不起来，八成是 README 没写启动方式。" });
+    if (!hasA.ENV) adv.push({ pri:"P1", tag:"配置", title:"补环境变量示例",
+      detail:".env.example：列出所有必需变量，值留空或占位",
+      why:"缺了它，新环境第一次启动必然报一堆「变量未定义」。" });
+    if (!hasA.DEPLOY) adv.push({ pri:"P2", tag:"部署", title:"补部署配置",
+      detail:"Dockerfile，或 vercel.json / netlify.toml —— 把部署方式固化下来",
+      why:"部署步骤靠人记，换个人就部署错版本。" });
+    if (!hasA.CI) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml：install → lint → test → build",
+      why:"没有 CI，坏代码能一路合进主分支。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"优先覆盖工具函数、数据处理、关键交互路径",
+      why:"Web 改动频繁，没有测试只能靠手点。" });
+    if (!hasA.API) adv.push({ pri:"P3", tag:"文档", title:"补接口文档",
+      detail:"docs/api.md 或 OpenAPI 描述文件",
+      why:"前后端对接全靠口头传话，一改就断。" });
+    if (!hasA.STYLE) adv.push({ pri:"P3", tag:"规范", title:"补样式规范",
+      detail:"design-token 或 tailwind.config：色板 / 间距 / 字号",
+      why:"没有 token，同一个灰会出现八种色值。" });
+    return sortAdv(adv);
+  }
+
+  function adviceLib(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 3, LIB_PHASE_FILE, "对外发布的库少了这环，使用者会直接卡住。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：一句话用途 + 安装 + 30 秒上手示例 + API 速览",
+      why:"库的 README 就是它的门面，写得含糊就没人用。" });
+    if (!hasA.TEST) adv.push({ pri:"P1", tag:"质量", title:"补测试",
+      detail:"tests/ 覆盖公开 API 与边界情况",
+      why:"库被别人依赖，出错的影响面比自用代码大得多。" });
+    if (!hasA.LICENSE) adv.push({ pri:"P1", tag:"合规", title:"补 LICENSE",
+      detail:"LICENSE 文件（MIT / Apache-2.0 等）",
+      why:"没有协议，法律上默认禁止他人使用。" });
+    if (!hasA.TYPE) adv.push({ pri:"P2", tag:"体验", title:"补类型定义",
+      detail:"index.d.ts 或 types/ 目录",
+      why:"TS 用户没有类型等于没有自动补全，体验掉一大截。" });
+    if (!hasA.CHANGELOG) adv.push({ pri:"P2", tag:"发布", title:"补 CHANGELOG",
+      detail:"CHANGELOG.md：按版本记录新增 / 修复 / 破坏性变更",
+      why:"升级时无从判断会不会踩坑。" });
+    if (!hasA.EXAMPLE) adv.push({ pri:"P2", tag:"文档", title:"补示例",
+      detail:"examples/ 或 demo/：最小可运行示例",
+      why:"文档写得再全，不如一个能跑的例子。" });
+    if (!hasA.CI) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml：在多个 Node 版本上跑测试",
+      why:"库要兼容多环境，本地只能验一个。" });
+    if (!hasA.API) adv.push({ pri:"P3", tag:"文档", title:"补 API 文档",
+      detail:"docs/api.md，或用 typedoc / jsdoc 自动生成",
+      why:"API 超过十个，靠读源码记不住。" });
+    return sortAdv(adv);
+  }
+
+  var MINI_PHASE_FILE = {
+    0:"index.html —— 唯一入口，双击即玩",
+    1:"开始页写明怎么玩（几句话就够，别写成长文档）",
+    2:"结束页 / 结算：给这一局一个收尾和小结",
+    3:"manifest.json 登记，或 README 写清玩法"
+  };
+
+  function adviceMini(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 2, MINI_PHASE_FILE, "小作品也要有头有尾，缺了这环体验就不完整。");
+    if (!hasA.ENTRY) adv.push({ pri:"P0", tag:"基础", title:"补 index.html",
+      detail:"入口文件固定叫 index.html，放在作品自己的文件夹里",
+      why:"目录规范要求的入口名，改了别的工具就找不到它。" });
+    if (!hasA.INTRO) adv.push({ pri:"P1", tag:"体验", title:"补开始页说明",
+      detail:"开始页用一两句话写清怎么玩，别让人一进来就懵",
+      why:"小游戏没有说明书，玩家唯一的引导就是开始页那几行字。" });
+    if (!hasA.LOOP) adv.push({ pri:"P1", tag:"体验", title:"补收尾",
+      detail:"加结束页或结算：这一局怎么样、要不要再来一次",
+      why:"没有收尾就没有完整体验弧线，玩完像被打断。" });
+    if (!hasA.SELF) adv.push({ pri:"P1", tag:"规范", title:"去掉外部 CDN 依赖",
+      detail:"把 cdn / unpkg / jsdelivr 上的库下载到本地，或改用原生实现",
+      why:"靠外链就断网即死，也不符合「整个文件夹自包含」的约定。" });
+    if (!hasA.PERF) adv.push({ pri:"P2", tag:"性能", title:"用 requestAnimationFrame",
+      detail:"动画走 rAF，位移按 dt 计算，别用 setInterval",
+      why:"setInterval 在不同刷新率屏幕上速度不一致，还容易掉帧。" });
+    if (!hasA.RESP) adv.push({ pri:"P2", tag:"适配", title:"补移动端适配",
+      detail:"加 viewport meta，交互同时支持 touchstart 与 pointerdown",
+      why:"手机上只有触屏事件，只绑 mousedown 会完全点不动。" });
+    return sortAdv(adv);
+  }
+
+  function adviceTool(d){
+    var adv = [], hasA = d.has;
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：这工具干什么用 + 怎么运行 + 需要什么环境",
+      why:"内部工具最容易烂尾，就是因为只有作者知道怎么用。" });
+    if (!hasA.LAUNCH) adv.push({ pri:"P2", tag:"易用", title:"补启动脚本",
+      detail:"run.bat / run.sh：双击就能跑，不用记命令",
+      why:"命令靠手敲，过两周连你自己都记不住。" });
+    if (!hasA.USAGE) adv.push({ pri:"P2", tag:"文档", title:"写清用法",
+      detail:"README 里给出参数说明与一两个实际例子",
+      why:"工具给别人用时，没有例子等于没有文档。" });
+    if (!hasA.CONFIG) adv.push({ pri:"P3", tag:"配置", title:"说明配置项",
+      detail:"若有配置，列出每项含义与默认值",
+      why:"配置项没说明，只能翻源码猜。" });
+    if (d.files > 12 && !hasA.CI) adv.push({ pri:"P3", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml",
+      why:"工具开始被多人使用后，改动需要一道保险。" });
+    return sortAdv(adv);
+  }
+
+  function adviceMeta(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 3, META_PHASE_FILE, "规则库这类项目缺了这环，就只剩一堆散文档。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：一句话定位 + 目录说明 + 主要入口",
+      why:"规则库也要有门面，否则新来的人不知道从哪读起。" });
+    if (!hasA.OVERVIEW) adv.push({ pri:"P1", tag:"总览", title:"补项目总览",
+      detail:"PROJECT_OVERVIEW.md：这套规则要解决什么、边界在哪、当前状态",
+      why:"没有总览，读的人只能自己拼，容易理解偏。" });
+    if (!hasA.CONV) adv.push({ pri:"P1", tag:"约定", title:"补约定文档",
+      detail:"rules/ 或 约定.md：把「必须这么做」的规矩写死",
+      why:"约定只存在脑子里，执行时必然走样。" });
+    if (!hasA.TOOL) adv.push({ pri:"P2", tag:"工具化", title:"把重复劳动脚本化",
+      detail:"tools/ 或 scripts/：能自动做的别靠人记",
+      why:"规则库的价值在于可执行，纯文本规则迟早被绕过。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"自检", title:"补自检脚本",
+      detail:"tests/ 或 audit 脚本：检查约定是否真的被遵守",
+      why:"没有自检，规范就是纸面文章。" });
+    if (!hasA.CI) adv.push({ pri:"P2", tag:"工程化", title:"接 CI 跑自检",
+      detail:".github/workflows/ci.yml：push 时自动跑审计与冒烟测试",
+      why:"自检靠手动跑，等于没有。" });
+    if (!hasA.INDEX) adv.push({ pri:"P3", tag:"导航", title:"补索引",
+      detail:"README 里维护一份文档索引表",
+      why:"文档一多就找不到，索引是唯一解。" });
+    return sortAdv(adv);
+  }
+
+  function adviceGeneric(d){
+    var adv = [], hasA = d.has;
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：这项目是什么 + 怎么运行",
+      why:"没有 README 的项目，三天后连自己都看不懂。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"tests/：先覆盖核心逻辑",
+      why:"改代码时没有安全网。" });
+    if (!hasA.CI && d.files > 12) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml",
+      why:"没有 CI，回归只能靠手工跑。" });
+    if (!hasA.LICENSE) adv.push({ pri:"P3", tag:"合规", title:"补 LICENSE",
+      detail:"LICENSE 文件",
+      why:"若打算公开，缺协议等于禁止他人使用。" });
+    return sortAdv(adv);
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  function renderCard(d){
+    var phDone = d.phases.list.filter(function(p){ return p.done; }).length;
+    var h = '<div class="card" id="card-' + d.label + '">';
+    h += '<div class="cname">' + esc(d.name) + '</div>';
+    h += '<div class="cmeta">' + d.files + ' 个文件 · ' + d.dirs + ' 个目录</div>';
+    h += '<div><span class="ptag">' + esc(d.profileName) + '</span><span class="tag hi">' + esc(d.type) + '</span>';
+    d.exts.forEach(function(e){ h += '<span class="tag">.' + esc(e.ext) + ' ×' + e.n + '</span>'; });
+    h += '</div>';
+
+    if (d.intro){
+      h += '<h3>项目介绍</h3><div class="intro">';
+      h += '<div class="ititle">' + esc(d.intro.title) + '</div>';
+      if (d.intro.body) h += '<div class="ibody">' + esc(d.intro.body) + '</div>';
+      h += '<div class="isrc">来源：' +
+           (d.intro.fromDoc ? '读取文档 <b>' + esc(d.intro.source) + '</b>' :
+            '<b>代码结构推断</b> —— 项目里没有找到可读的说明文档') + '</div>';
+      if (d.intro.tech.length){
+        h += '<div style="margin-top:9px">';
+        d.intro.tech.forEach(function(t){ h += '<span class="tag">' + esc(t) + '</span>'; });
+        h += '</div>';
+      }
+      if (d.intro.modules.length){
+        h += '<div class="mods">';
+        d.intro.modules.forEach(function(m){
+          h += '<div class="row"><i class="dot ok"></i><span class="n">' + esc(m.dir) + '</span>' +
+               '<span class="v">' + esc(m.mean) + '</span></div>';
+        });
+        h += '</div>';
+      }
+      h += '</div>';
+    }
+
+    h += '<h3>阶段进度（' + esc(d.profileName) + ' · ' + esc(d.profileTag) + '）</h3><div class="phases">';
+    d.phases.list.forEach(function(p){
+      var cls = p.done ? "done" : (p.cur ? "cur" : "");
+      h += '<div class="ph"><div class="phbox ' + cls + '" title="' + (p.evidence ? esc(p.evidence) : "无证据") + '">' + p.id + '</div><div class="phlbl">' + p.name + '</div></div>';
+    });
+    h += '</div>';
+    var total = d.phases.list.length;
+    h += '<div class="cmeta" style="margin-top:8px">已完成 ' + phDone + '/' + total + ' 阶段' + (d.phases.cur >= 0 ? ' · 当前在 <b style="color:var(--warn)">' + d.phases.list[d.phases.cur].name + '</b>' : (phDone === total ? ' · 全部阶段均有产物' : '')) + '</div>';
+    h += '<div class="cmeta" style="margin-top:6px;color:var(--tx3)">分析模板：' + esc(d.profileName) +
+         (d.profile !== d.auto ? '（手动指定；自动识别为「' + esc(getProfile(d.auto).name) + '」）' : '（自动识别）') + '</div>';
+    if (d.files < 20 && phDone <= 1){
+      h += '<div class="cmeta" style="margin-top:6px;color:var(--tx3)">这是轻量项目，未采用阶段制流程——小游戏 / 工具类项目本就不需要全套文档，阶段进度低不代表有问题。</div>';
+    }
+
+    h += '<h3>产物清点</h3>';
+    d.artifacts.forEach(function(a){
+      h += '<div class="row"><i class="dot ' + (a.has ? "ok" : "no") + '"></i><span class="n">' + a.label + '</span>' +
+           '<span class="v">' + (a.has ? (a.count > 1 ? a.count + " 处" : "有") : "缺") + '</span></div>';
+    });
+
+    h += '<h3>工程化</h3>';
+    h += '<div class="row"><i class="dot ' + (d.eng.ci ? "ok" : "no") + '"></i><span class="n">CI 流水线</span><span class="v">' + (d.eng.ci ? "有" : "缺") + '</span></div>';
+    h += '<div class="row"><i class="dot ' + (d.eng.test ? "ok" : "no") + '"></i><span class="n">测试文件</span><span class="v">' + (d.eng.test || "缺") + '</span></div>';
+    h += '<div class="row"><i class="dot ' + (d.eng.readme ? "ok" : "no") + '"></i><span class="n">README</span><span class="v">' + (d.eng.readme ? "有" : "缺") + '</span></div>';
+    if (d.eng.pkg) h += '<div class="row"><i class="dot ok"></i><span class="n">npm scripts</span><span class="v">' + esc(d.eng.scripts.join(", ") || "无") + '</span></div>';
+
+    var gaps = d.artifacts.filter(function(a){ return !a.has; }).map(function(a){ return a.label; });
+    if (!d.eng.ci) gaps.push("CI 流水线");
+    if (!d.eng.test) gaps.push("测试");
+    if (gaps.length){
+      h += '<div class="gaps"><b>缺口 ' + gaps.length + ' 项</b><ul>' +
+           gaps.map(function(g){ return '<li>' + esc(g) + '</li>'; }).join("") + '</ul></div>';
+    }
+
+    if (d.advice && d.advice.length){
+      h += '<h3>优化建议（按优先级）</h3>';
+      d.advice.forEach(function(a){
+        h += '<div class="adv">' +
+             '<div class="ah"><span class="pri ' + a.pri + '">' + a.pri + '</span>' +
+             '<span class="atag">' + esc(a.tag) + '</span><b>' + esc(a.title) + '</b></div>' +
+             '<div class="adetail">' + esc(a.detail) + '</div>' +
+             '<div class="awhy">为什么：' + esc(a.why) + '</div></div>';
+      });
+    } else {
+      h += '<h3>优化建议</h3><div class="empty">该有的都有了，没查出需要补的项。</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function renderCompare(a, b){
+    var h = '<div class="card cmp">';
+    h += '<div class="head-row"><div class="k">对比项</div><div class="a">A · ' + esc(a.name) + '</div><div class="b">B · ' + esc(b.name) + '</div></div>';
+
+    function row(k, va, vb, unit){
+      var diff = String(va) !== String(vb);
+      h += '<div class="row"><div class="k">' + k + '</div>' +
+           '<div class="a">' + esc(va) + (unit||"") + '</div>' +
+           '<div class="b">' + esc(vb) + (unit||"") + (diff ? '<span class="diffmark">差异</span>' : '') + '</div></div>';
+    }
+
+    row("分析模板", a.profileName, b.profileName);
+    row("项目类型", a.type, b.type);
+    row("文件数", a.files, b.files);
+    row("目录数", a.dirs, b.dirs);
+    row("完成阶段", a.phases.list.filter(function(p){return p.done;}).length + "/" + a.phases.list.length,
+                    b.phases.list.filter(function(p){return p.done;}).length + "/" + b.phases.list.length);
+    row("CI", a.eng.ci ? "有" : "缺", b.eng.ci ? "有" : "缺");
+    row("测试文件", a.eng.test || 0, b.eng.test || 0);
+
+    h += '<div class="head-row" style="margin-top:16px"><div class="k">产物</div><div class="a">A</div><div class="b">B</div></div>';
+    getProfile(a.profile).artifacts.forEach(function(def, i){
+      var x = a.artifacts[i], y = b.artifacts[i];
+      var diff = x.has !== y.has;
+      h += '<div class="row"><div class="k" style="color:var(--tx3);font-size:12.5px">' + def.label + '</div>' +
+           '<div class="a"><i class="dot ' + (x.has?"ok":"no") + '" style="display:inline-block;margin-right:6px"></i>' + (x.has ? x.count + " 处" : "缺") + '</div>' +
+           '<div class="b"><i class="dot ' + (y.has?"ok":"no") + '" style="display:inline-block;margin-right:6px"></i>' + (y.has ? y.count + " 处" : "缺") +
+           (diff ? '<span class="diffmark">差异</span>' : '') + '</div></div>';
+    });
+
+    // 独有项
+    var onlyA = a.artifacts.filter(function(x,i){ return x.has && !b.artifacts[i].has; }).map(function(x){ return x.label; });
+    var onlyB = b.artifacts.filter(function(y,i){ return y.has && !a.artifacts[i].has; }).map(function(y){ return y.label; });
+    if (onlyA.length || onlyB.length){
+      h += '<div class="gaps"><b>独有产物</b><ul>';
+      if (onlyA.length) h += '<li>仅 A 有：' + esc(onlyA.join("、")) + '</li>';
+      if (onlyB.length) h += '<li>仅 B 有：' + esc(onlyB.join("、")) + '</li>';
+      h += '</ul></div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function render(){
+    var out = document.getElementById("out");
+    if (!A && !B){ out.innerHTML = '<div class="empty">还没有选择项目目录。</div>'; return; }
+    if (mode === "compare"){
+      if (!A || !B){ out.innerHTML = '<div class="empty">对比模式需要同时选择项目 A 和项目 B。</div>'; return; }
+      // 对比必须同模板，否则阶段与产物对不齐，没有可比性
+      if (B.profile !== A.profile) B = buildData("B", A.profile);
+      out.innerHTML = renderCompare(A, B);
+    } else {
+      var items = [A, B].filter(Boolean);
+      out.innerHTML = '<div class="grid' + (items.length > 1 ? " two" : "") + '">' +
+        items.map(renderCard).join("") + '</div>';
+    }
+  }
+
+  function slotText(which, d){
+    return "项目 " + which + "：<b>" + esc(d.name) + "</b> — " +
+      d.files + " 文件 · " + esc(d.type) + " · 模板「" + esc(d.profileName) + "」 · 完成 " +
+      d.phases.list.filter(function(p){return p.done;}).length + "/" + d.phases.list.length + " 阶段";
+  }
+
+  function updateSlots(){
+    var sa = document.getElementById("slotA");
+    var sb = document.getElementById("slotB");
+    if (A){ sa.className = "slot loaded"; sa.innerHTML = slotText("A", A); }
+    if (B){ sb.className = "slot loaded"; sb.innerHTML = slotText("B", B); }
+  }
+
+  function applyProfile(pid){
+    if (A) A = buildData("A", pid || A.auto);
+    if (B) B = buildData("B", pid || B.auto);
+    updateSlots();
+    render();
+  }
+
+  function load(which, input){
+    if (!input.files || !input.files.length) return;
+    var slot = document.getElementById(which === "A" ? "slotA" : "slotB");
+    slot.className = "slot";
+    slot.textContent = "分析中…";
+    var forced = document.getElementById("selProfile").value || null;
+    analyze(input.files, which, forced).then(function(data){
+      if (!data){ slot.textContent = "该项目没有可分析的文件"; return; }
+      if (which === "A") A = data; else B = data;
+      updateSlots();
+      if (which === "B" && A) setMode("compare");
+      else render();
+    });
+  }
+
+  function setMode(m){
+    mode = m;
+    document.getElementById("mSingle").className = (m === "single" ? "on" : "");
+    document.getElementById("mCompare").className = (m === "compare" ? "on" : "");
+    render();
+  }
+
+  document.getElementById("btnA").onclick = function(){ document.getElementById("fa").click(); };
+  document.getElementById("btnB").onclick = function(){ document.getElementById("fb").click(); };
+  document.getElementById("fa").onchange = function(){ load("A", this); };
+  document.getElementById("fb").onchange = function(){ load("B", this); };
+  document.getElementById("mSingle").onclick = function(){ setMode("single"); };
+  document.getElementById("mCompare").onclick = function(){ setMode("compare"); };
+  document.getElementById("btnClear").onclick = function(){
+    A = null; B = null; CACHE = {};
+    document.getElementById("fa").value = "";
+    document.getElementById("fb").value = "";
+    document.getElementById("selProfile").value = "";
+    document.getElementById("slotA").className = "slot";
+    document.getElementById("slotA").textContent = "项目 A：未选择";
+    document.getElementById("slotB").className = "slot";
+    document.getElementById("slotB").textContent = "项目 B：未选择（对比模式需要）";
+    setMode("single");
+  };
+
+  // 模板下拉框
+  var selP = document.getElementById("selProfile");
+  PROFILE_ORDER.forEach(function(id){
+    var p = PROFILES[id];
+    var op = document.createElement("option");
+    op.value = id;
+    op.textContent = p.name + " · " + p.tag;
+    selP.appendChild(op);
+  });
+  selP.onchange = function(){ applyProfile(this.value); };
+
+  window.__PA = {
+    analyze: analyze, buildData: buildData,
+    detectType: detectType, detectProfile: detectProfile,
+    detectPhases: detectPhases, detectArtifacts: detectArtifacts,
+    detectEngineering: detectEngineering, genIntro: genIntro, inferModules: inferModules,
+    PROFILES: PROFILES, getProfile: getProfile
+  };
+  render();
+})();
+</script>
+</body>
+</html>

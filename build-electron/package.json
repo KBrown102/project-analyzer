@@ -1,0 +1,43 @@
+{
+  "name": "project-analyzer",
+  "version": "1.0.0",
+  "description": "项目结构分析器 - 按 CCGS 结构分析本地项目并可视化对比",
+  "main": "main.js",
+  "author": "local",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.local.projectanalyzer",
+    "productName": "项目结构分析器",
+    "copyright": "Copyright © 2026",
+    "files": [
+      "main.js",
+      "project-analyzer.html",
+      "icon.ico"
+    ],
+    "directories": {
+      "output": "dist-out"
+    },
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "项目结构分析器-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "项目结构分析器-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
