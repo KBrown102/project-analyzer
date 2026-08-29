@@ -52,12 +52,14 @@ assert("no legacy ARTIFACTS array", !/\bARTIFACTS\b/.test(html));
 ["build-electron/main.js", "build-electron/package.json", "assets/icon.ico", "assets/make-icon.py"].forEach((rel) =>
   assert(`${rel} exists`, fs.existsSync(path.join(root, rel)))
 );
-["build-desktop.bat", "build-desktop-ps.bat", "build-exe-electron.bat", "run-local-electron.bat", "clean-build.bat"].forEach((rel) =>
+["build-desktop.bat", "build-desktop-ps.bat", "build-exe-electron.bat", "run-local-electron.bat",
+  "clean-build.bat", "push-to-github.bat"].forEach((rel) =>
   assert(`${rel} exists`, fs.existsSync(path.join(root, rel)))
 );
 
-// bat 必须是 GBK，否则中文在 cmd 里会乱码
-["build-desktop.bat", "build-exe-electron.bat", "clean-build.bat", "run-local-electron.bat"].forEach((rel) => {
+// bat 必须是 GBK，否则中文在 cmd 里会乱码。新增中文 bat 时记得加进这个列表。
+["build-desktop.bat", "build-desktop-ps.bat", "build-exe-electron.bat",
+  "clean-build.bat", "run-local-electron.bat", "push-to-github.bat"].forEach((rel) => {
   const buf = fs.readFileSync(path.join(root, rel));
   const isUtf8Bom = buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
   assert(`${rel} not UTF-8-BOM`, !isUtf8Bom);
