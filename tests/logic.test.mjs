@@ -7,7 +7,8 @@ import { loadAnalyzer, fakeTree, createChecker, root } from "./_harness.mjs";
 const { api } = loadAnalyzer();
 const C = createChecker("Logic tests · 项目结构分析器（真实执行分析逻辑）");
 
-const PROFILE_ORDER = ["game", "web", "lib", "mini", "tool", "meta", "generic"];
+// 直接从实现读，避免和 html 里的 PROFILE_ORDER 漂移（现已含 server 共 8 套）
+const PROFILE_ORDER = api.PROFILE_ORDER;
 const PRI_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
 /** 跑一次完整分析，返回 buildData 的结果对象。 */
@@ -68,6 +69,19 @@ const FIX = {
     "mytool/main.py": "import os\ndef main():\n    pass\n",
   },
 
+  // Node Express 后端 → server（必须被判成 server 模板，而不是被 web/tool 抢走）
+  server: {
+    "api/package.json": JSON.stringify({ name: "api", dependencies: { express: "^4" } }),
+    "api/README.md": "# 我的后端\n\n提供用户与订单接口。",
+    "api/src/server.js": "const express = require('express');\nconst app = express();\napp.listen(3000);\n",
+    "api/src/routes/users.js": "router.get('/users', list);\n",
+    "api/src/models/user.js": "module.exports = { find() {} };\n",
+    "api/.env.example": "PORT=3000\nDB_URL=sqlite://\n",
+    "api/src/middleware/auth.js": "module.exports = (req,res,next)=>next();\n",
+    "api/Dockerfile": "FROM node:18\nCMD node src/server.js\n",
+    "api/test/server.test.js": "test('health', () => {});\n",
+  },
+
   // 规则 / 文档仓库 → meta
   meta: {
     "myrules/README.md": "# 规则库\n\n团队约定集合。",
@@ -102,8 +116,8 @@ for (const id of PROFILE_ORDER) {
   detected[id] = d;
   C.eq(`${id} → profile`, d.profile, id);
 }
-C.ok("七个 fixture 判出七种模板，无重复",
-  new Set(Object.values(detected).map((d) => d.profile)).size === 7,
+C.ok("八个 fixture 判出八种模板，无重复",
+  new Set(Object.values(detected).map((d) => d.profile)).size === 8,
   [...new Set(Object.values(detected).map((d) => d.profile))].join(","));
 
 // ── 2. 类型识别 ────────────────────────────────────────────────
@@ -114,6 +128,52 @@ C.eq("Python", detected.tool.type, "Python 项目");
 C.eq("规则仓库", detected.meta.type, "规则 / 文档仓库");
 C.eq("HTML5 小游戏", detected.mini.type, "HTML5 网页项目");
 C.eq("未识别", detected.generic.type, "未识别类型");
+C.eq("后端", detected.server.type, "Node 后端服务");
+
+// ── 2b. 服务端 / 后端识别（用户明确诉求：要能认出后端项目）────
+console.log("\n[2b] 服务端 / 后端识别");
+const SRV = {
+  "node-express": {
+    "be/package.json": JSON.stringify({ name: "be", dependencies: { express: "^4" } }),
+    "be/src/server.js": "const express=require('express');\n",
+    "be/src/routes/users.js": "router.get('/users');\n",
+  },
+  "python-fastapi": {
+    "be/requirements.txt": "fastapi\nuvicorn\n",
+    "be/main.py": "from fastapi import FastAPI\n",
+    "be/routes/users.py": "def list_users():\n    pass\n",
+  },
+  "java-spring": {
+    "svc/pom.xml": "<project></project>\n",
+    "svc/src/main/java/com/App.java": "class App {}\n",
+    "svc/src/main/java/com/controller/UserController.java": "class UserController {}\n",
+  },
+  "go-service": {
+    "gsvc/go.mod": "module gsvc\n",
+    "gsvc/cmd/server.go": "package main\n",
+    "gsvc/internal/handler/user.go": "package handler\n",
+  },
+};
+for (const [k, tree] of Object.entries(SRV)) {
+  const d = await run(tree, "srv-" + k);
+  C.eq(`${k} 判成 server 模板`, d.profile, "server");
+  C.ok(`${k} 不是 generic 兜底`, d.profile !== "generic");
+}
+// 对照组：前端 / 库 不能误判成后端
+const react = await run({
+  "fe/package.json": JSON.stringify({ name: "fe", dependencies: { react: "^18" } }),
+  "fe/src/App.tsx": "export default ()=><div/>;\n",
+  "fe/src/pages/home.tsx": "export default ()=><div/>;\n",
+}, "srv-react");
+C.ok("React 前端不误判为 server", react.profile !== "server");
+C.eq("React 判成 web", react.profile, "web");
+
+const npmLib = await run({
+  "lib/package.json": JSON.stringify({ name: "lib", main: "dist/index.js", types: "dist/index.d.ts" }),
+  "lib/src/index.ts": "export function add(a:number,b:number){return a+b;}\n",
+}, "srv-lib");
+C.ok("npm 库不误判为 server", npmLib.profile !== "server");
+C.eq("npm 库判成 lib", npmLib.profile, "lib");
 
 // ── 3. 结果结构完整性 ──────────────────────────────────────────
 console.log("\n[3] 结果结构");
@@ -319,8 +379,8 @@ for (const fid of Object.keys(FIX)) {
     }
   }
 }
-C.eq(`7 fixture × 7 模板 = 49 组合全部跑通`, crossFail, 0);
-C.ok(`实际跑了 ${cross} 个组合`, cross === 49);
+C.eq(`8 fixture × 8 模板 = 64 组合全部跑通`, crossFail, 0);
+C.ok(`实际跑了 ${cross} 个组合`, cross === 64);
 
 // ── 12. 两份 html 必须一致（electron 打包用的是副本）──────────
 console.log("\n[12] 打包副本同步");
@@ -474,7 +534,7 @@ console.log("\n[13] window.__PA 契约");
   "detectProjects", "scoreDir", "genPrompt"].forEach((k) => {
   C.ok(`__PA.${k} 已暴露`, api[k] !== undefined);
 });
-C.eq("PROFILES 有 7 套", Object.keys(api.PROFILES).length, 7);
+C.eq("PROFILES 有 8 套", Object.keys(api.PROFILES).length, 8);
 C.ok("getProfile 未知 id 回落 generic", api.getProfile("__nope__").id === "generic");
 
 // ── 汇总 ───────────────────────────────────────────────────────

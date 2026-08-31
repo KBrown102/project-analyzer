@@ -233,6 +233,33 @@
       advice: adviceWeb
     },
 
+    server: {
+      id:"server", name:"后端服务", tag:"能跑到能上线",
+      phases:[
+        { id:0, name:"能跑",     re:/(^|\/)(server|app|main|index|manage)\.(js|ts|py|go|rb|php)$|(^|\/)cmd\/[^/]+\.go$|(^|\/)(Application|Program)\.(java|cs)$/i },
+        { id:1, name:"接口层",   re:/(^|\/)(routes?|routers?|controllers?|handlers?|endpoints?|api)\//i },
+        { id:2, name:"数据层",   re:/(^|\/)(models?|entities?|repositor(y|ies)|dao|migrations?|prisma)\/|schema\.(prisma|sql)$|alembic/i },
+        { id:3, name:"配置环境", re:/\.env\.(example|sample|template)|application\.(yml|yaml|properties)|(^|\/)(config|conf|settings)\//i },
+        { id:4, name:"质量保障", re:/(^|\/)(tests?|spec)\/|(^|\/)(middleware|exceptions?|errors?|logger|logging)\//i },
+        { id:5, name:"交付上线", re:/Dockerfile|docker-compose|health|readiness|liveness|actuator|\.github\/workflows/i }
+      ],
+      artifacts:[
+        { key:"README",  label:"README",        re:RE_DOC },
+        { key:"ENV",     label:"环境变量示例",   re:/\.env\.(example|sample|template)/i },
+        { key:"CONFIG",  label:"配置文件",       re:/application\.(yml|yaml|properties|toml)|(^|\/)(config|conf|settings)\//i },
+        { key:"API",     label:"API 文档",       re:/swagger|openapi|api\.(md|ya?ml|json)$|(^|\/)docs\/api/i },
+        { key:"MIGRATE", label:"数据迁移",       re:/(^|\/)(migrations?|prisma)\/|schema\.(prisma|sql)$|alembic/i },
+        { key:"AUTH",    label:"鉴权",           re:/(^|\/)(auth|guard|permission|security)\/|middleware/i },
+        { key:"ERR",     label:"统一错误处理",    re:/(^|\/)(errors?|exceptions?)\/|error[_-]?handler/i },
+        { key:"LOG",     label:"日志",           re:/(^|\/)(logs?|logger|logging)\/|winston|logrus|zap|log4j|loguru/i },
+        { key:"DOCKER",  label:"容器化",         re:/Dockerfile|docker-compose|\.dockerignore/i },
+        { key:"HEALTH",  label:"健康检查",       re:/health|readiness|liveness|actuator/i },
+        { key:"TEST",    label:"测试",           re:RE_TEST },
+        { key:"CI",      label:"CI 配置",        re:RE_CI }
+      ],
+      advice: adviceServer
+    },
+
     lib: {
       id:"lib", name:"库 / SDK", tag:"接口到发布",
       phases:[
@@ -331,7 +358,7 @@
     }
   };
 
-  var PROFILE_ORDER = ["game","web","lib","mini","tool","meta","generic"];
+  var PROFILE_ORDER = ["game","web","server","lib","mini","tool","meta","generic"];
 
   function getProfile(id){ return PROFILES[id] || PROFILES.generic; }
 
@@ -356,12 +383,59 @@
       return /canvas|requestAnimationFrame|game|游戏/i.test(joined) ? "HTML5 网页项目" : "静态网站";
     }
     if (anyPath(paths, /package\.json$/)) {
-      return /three|canvas|phaser|pixi/i.test(joined) ? "Web 游戏工程" : "Node / 前端工程";
+      if (/three|canvas|phaser|pixi/i.test(joined)) return "Web 游戏工程";
+      // 有后端框架特征、无前端页面信号 → 这是服务端，而不是「前端工程」
+      if (!hasFrontendSignal(paths) && serverScore(paths, texts) >= 3) return "Node 后端服务";
+      if (anyPath(paths, /\.(tsx|jsx|vue|svelte)$/i) ||
+          anyPath(paths, /(^|\/)(pages|views|components|styles|public)\//i)) return "Node / 前端工程";
+      return "Node 工程";
     }
     if (anyPath(paths, /requirements\.txt$|pyproject\.toml$|\.py$/)) return "Python 项目";
-    if (anyPath(paths, /\.java$|\.gradle$/)) return "Java / Android 项目";
+    // Android 单独认，免得 Spring Boot 这类后端被叫成「Android 项目」
+    if (anyPath(paths, /AndroidManifest\.xml$|(^|\/)android\//i)) return "Android 项目";
+    if (anyPath(paths, /\.java$|\.gradle$|pom\.xml$/)) return "Java 项目";
     if (anyPath(paths, /\.rs$|Cargo\.toml$/)) return "Rust 项目";
+    if (anyPath(paths, /go\.mod$/)) return "Go 项目";
+    if (anyPath(paths, /\.csproj$|\.sln$/)) return ".NET 项目";
+    if (anyPath(paths, /composer\.json$|\.php$/)) return "PHP 项目";
+    if (anyPath(paths, /Gemfile$|\.rb$/)) return "Ruby 项目";
     return "未识别类型";
+  }
+
+  // —— 后端服务信号打分 ——
+  // 前后端都可能有 src/ 和 package.json，所以既看依赖也看目录，两边都要有证据。
+  // 注意：.java / .go / .xml 不在 TEXT_RE 里，内容读不到，这些技术栈只能靠路径判断。
+  function serverScore(paths, texts){
+    var s = 0;
+
+    // 依赖清单里的后端框架（Node / Python 系能读到内容）
+    var joined = texts.slice(0, 60).map(function(t){ return t.text; }).join("\n").slice(0, 30000);
+    if (/express|koa|@nestjs|nestjs|fastify|hapi|socket\.io|fastapi|django|flask|tornado|sanic|celery/i.test(joined)) s += 3;
+    // serverless / BaaS 也算服务端
+    if (/"serverless"|serverless\.yml|vercel\.json.*functions|firebase-functions/i.test(joined)) s += 2;
+
+    // 服务端分层目录
+    if (anyPath(paths, /(^|\/)(controllers?|handlers?|repositor(y|ies)|services?|middleware|migrations?)\//i)) s += 2;
+    if (anyPath(paths, /(^|\/)(routes?|routers?)\//i)) s += 2;
+    // 数据层
+    if (anyPath(paths, /(^|\/)(models?|entities?|dao)\//i) || anyPath(paths, /schema\.(prisma|sql)$/i)) s += 1;
+    // 服务端典型配置与入口
+    if (anyPath(paths, /application\.(yml|yaml|properties)$/i)) s += 2;
+    if (anyPath(paths, /(^|\/)(server|manage)\.(js|ts|py)$|(^|\/)cmd\/[^/]+\.go$/i)) s += 1;
+    if (anyPath(paths, /Dockerfile|docker-compose/i)) s += 1;
+
+    // Java / Go 系：源码内容读不到，靠构建文件 + 标准目录结构认
+    if (anyPath(paths, /pom\.xml$|build\.gradle$/i) && anyPath(paths, /(^|\/)src\/main\/java\//i)) s += 3;
+    if (anyPath(paths, /(^|\/)go\.mod$/i) && anyPath(paths, /(^|\/)(cmd|internal|pkg)\//i)) s += 3;
+    if (anyPath(paths, /\.(csproj|sln)$/i) && anyPath(paths, /(^|\/)(Controllers?|Startup|Program)\.cs$/i)) s += 3;
+
+    return s;
+  }
+
+  // 强前端信号：有这些就不该判成后端（全栈项目归 Web 应用）
+  function hasFrontendSignal(paths){
+    return !!anyPath(paths, /\.(tsx|jsx|vue|svelte)$/i) ||
+           !!anyPath(paths, /(^|\/)(pages|views|components|styles|public)\//i);
   }
 
   // —— 判断该用哪套模板 ——
@@ -387,6 +461,11 @@
       if (/game/i.test(paths.join(" "))) return "mini";
       if (paths.length <= 6) return "mini";
     }
+
+    // 后端服务：必须排在 tool / lib / web 之前——
+    // 后端项目文件往往不多，容易被 tool 抢走；而 web 的判定里含 routes/，
+    // Express 这类项目会被误判成前端应用。
+    if (!hasFrontendSignal(paths) && serverScore(paths, texts) >= 3) return "server";
 
     // 内部工具：文件很少，或就一两个 html / 脚本
     var singleHtml = paths.length <= 5 && anyPath(paths, /(^|\/)[^/]+\.html$/);
@@ -808,6 +887,14 @@
     3:"examples/ 最小可运行示例",
     4:"CHANGELOG.md + 发布脚本"
   };
+  var SERVER_PHASE_FILE = {
+    0:"src/server.js / main.py / main.go —— 一个能起来的入口，README 里写清怎么跑",
+    1:"routes/ controllers/ handlers/ —— 路由与处理函数分层，别全堆在入口文件里",
+    2:"models/ migrations/ schema.prisma —— 数据模型与迁移脚本，能重放建库",
+    3:".env.example 或 application.yml —— 列出所有必需配置，值留空或占位",
+    4:"tests/ 覆盖接口层，middleware/ 里统一错误处理与日志",
+    5:"Dockerfile + docker-compose.yml + /health 健康检查端点"
+  };
   var META_PHASE_FILE = {
     0:"README.md —— 定位与入口",
     1:"rules/ 或 约定文档 —— 把规矩写死",
@@ -997,6 +1084,49 @@
     if (!hasA.INDEX) adv.push({ pri:"P3", tag:"导航", title:"补索引",
       detail:"README 里维护一份文档索引表",
       why:"文档一多就找不到，索引是唯一解。" });
+    return sortAdv(adv);
+  }
+
+  function adviceServer(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 4, SERVER_PHASE_FILE, "后端这条链缺了，接手的人只能靠猜数据从哪来到哪去。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：这个服务干什么 + 本地怎么起来 + 依赖哪些外部服务（数据库 / 缓存 / 消息队列）",
+      why:"服务端跑不起来八成是漏了外部依赖，README 不写清就得靠人传话。" });
+    if (!hasA.ENV) adv.push({ pri:"P0", tag:"配置", title:"补环境变量示例",
+      detail:".env.example：列出所有必需变量，值留空或占位",
+      why:"缺了它，新环境第一次启动必然报一堆「变量未定义」。" });
+    if (!hasA.CONFIG) adv.push({ pri:"P1", tag:"配置", title:"补配置文件",
+      detail:"config/ 或 application.yml：把端口、超时、连接池这类参数集中管理",
+      why:"配置散落在代码里，换环境只能全局搜索。" });
+    if (!hasA.API) adv.push({ pri:"P1", tag:"文档", title:"补 API 文档",
+      detail:"OpenAPI / Swagger 描述，或 docs/api.md 列出所有端点与出入参",
+      why:"接口靠口头对接，一改就断，联调成本全花在猜上。" });
+    if (!hasA.MIGRATE) adv.push({ pri:"P2", tag:"数据", title:"补数据迁移",
+      detail:"migrations/ 或 schema.prisma：建表与变更脚本，能从零重放",
+      why:"没有迁移脚本，数据库结构只存在于某台机器上，换环境就对不上。" });
+    if (!hasA.AUTH) adv.push({ pri:"P2", tag:"安全", title:"补鉴权",
+      detail:"middleware/auth 或 guard：统一做身份校验与权限判断",
+      why:"鉴权逻辑散在各个 handler 里，迟早漏一个。" });
+    if (!hasA.ERR) adv.push({ pri:"P2", tag:"健壮", title:"统一错误处理",
+      detail:"一个全局错误中间件：把异常转成统一结构的响应，别把堆栈直接吐给调用方",
+      why:"错误响应格式五花八门，调用方没法统一处理，还可能泄露内部信息。" });
+    if (!d.eng.test) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"优先覆盖接口层：每个端点至少一条正常路径 + 一条异常路径",
+      why:"后端改动影响面大，没测试只能靠手点接口。" });
+    if (!hasA.LOG) adv.push({ pri:"P3", tag:"可观测", title:"补日志",
+      detail:"结构化日志，带请求 ID，便于串联一次请求的全过程",
+      why:"线上出问题没有日志，只能靠猜。" });
+    // 这些是上了规模才需要的，小服务别一上来就堆
+    if (!hasA.DOCKER && d.files > 8) adv.push({ pri:"P2", tag:"部署", title:"补容器化",
+      detail:"Dockerfile + docker-compose.yml：把运行环境和依赖服务一起固化",
+      why:"部署步骤靠人记，换台机器就跑不起来。" });
+    if (!hasA.HEALTH && d.files > 12) adv.push({ pri:"P2", tag:"部署", title:"补健康检查",
+      detail:"/health 端点：返回服务自身与依赖（数据库 / 缓存）的可用状态",
+      why:"没有健康检查，容器编排不知道该不该重启它。" });
+    if (!d.eng.ci && d.files > 12) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml：install → lint → test → build",
+      why:"没有 CI，坏代码能一路合进主分支。" });
     return sortAdv(adv);
   }
 
@@ -1546,6 +1676,7 @@
     detectType: detectType, detectProfile: detectProfile,
     detectProjects: detectProjects, scoreDir: scoreDir,
     genPrompt: genPrompt, MANIFEST: MANIFEST, PROJECT_MIN: PROJECT_MIN,
+    PROFILE_ORDER: PROFILE_ORDER, serverScore: serverScore, hasFrontendSignal: hasFrontendSignal,
     analyzeEntries: analyzeEntries, readTexts: readTexts,
     // 下划线前缀 = 给测试用的内部接口
     _setSel: function(label, arr){ SEL[label] = arr; },
