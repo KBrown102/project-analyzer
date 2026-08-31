@@ -76,6 +76,40 @@
   .atag{font-size:11px;color:var(--tx3);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
   .adetail{color:var(--tx2);font-size:12.5px;line-height:1.65}
   .awhy{color:var(--tx3);font-size:11.5px;margin-top:4px}
+
+  /* —— 项目边界提示条 —— */
+  .bnd{background:var(--panel);border:1px solid var(--warn);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+  .bnd.ok{border-color:var(--ok)}
+  .bndt{font-size:13.5px;font-weight:500;color:var(--warn);margin-bottom:3px}
+  .bnd.ok .bndt{color:var(--ok)}
+  .bndd{color:var(--tx2);font-size:12.5px;margin-bottom:11px;line-height:1.65}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 13px;font-size:12.5px;cursor:pointer;transition:.12s;text-align:left}
+  .chip:hover{border-color:var(--ok);color:var(--ok)}
+  .chip.on{background:var(--okbg);border-color:var(--ok);color:#fff}
+  .chip .cn{font-weight:500}
+  .chip .ck{display:block;color:var(--tx3);font-size:11px;margin-top:2px}
+  .chip.on .ck{color:#c8f0e4}
+  .chip .ck b{font-weight:500;color:var(--tx2)}
+  .chip.on .ck b{color:#fff}
+
+  /* —— 建议勾选 —— */
+  .adv{position:relative;padding-left:36px}
+  .adv.off{opacity:.42}
+  .adv .ckbox{position:absolute;left:12px;top:13px;width:15px;height:15px;cursor:pointer;accent-color:var(--ok)}
+
+  /* —— 导出提示词 —— */
+  .exp{margin-top:20px;border-top:1px solid var(--line);padding-top:16px}
+  .expbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .expcount{color:var(--tx3);font-size:12px;margin-left:auto}
+  .prev{background:#12141a;border:1px solid var(--line);border-radius:9px;padding:14px;margin-top:11px;
+        font:12px/1.7 ui-monospace,Consolas,"Courier New",monospace;color:var(--tx2);
+        max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .prev.hide{display:none}
+  .toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);background:var(--okbg);
+         border:1px solid var(--ok);color:#fff;padding:9px 20px;border-radius:8px;font-size:13px;
+         opacity:0;pointer-events:none;transition:opacity .2s;z-index:99}
+  .toast.show{opacity:1}
   .note{color:var(--tx3);font-size:12px;margin-top:22px;line-height:1.7}
   .cmp{margin-top:18px}
   .cmp .row{border-bottom:1px solid var(--line);padding:8px 0}
@@ -120,6 +154,8 @@
   </div>
 </div>
 
+<div id="toast" class="toast"></div>
+
 <input type="file" id="fa" webkitdirectory directory multiple style="display:none">
 <input type="file" id="fb" webkitdirectory directory multiple style="display:none">
 
@@ -132,6 +168,8 @@
 
   var A = null, B = null, mode = "single";
   var CACHE = {};
+  // 当前分析到哪一层：null = 整个目录，否则是子项目路径
+  var SCOPE = { A:null, B:null };
 
   var RE_TEST = /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\.|test-strategy/i;
   var RE_CI   = /\.github\/workflows|gitlab-ci|\.gitlab-ci|azure-pipelines|Jenkinsfile/i;
@@ -427,6 +465,78 @@
     };
   }
 
+  // —— 项目边界：选的这一层到底是不是一个项目？还是个装着好几个项目的工作区？——
+  // 判定靠「项目标志物」：有 manifest 的目录基本可以认定是独立项目。
+  var MANIFEST = [
+    { re:/(^|\/)package\.json$/i,                          kind:"Node / 前端", w:3 },
+    { re:/(^|\/)(pyproject\.toml|setup\.py|Pipfile)$/i,    kind:"Python",      w:3 },
+    { re:/(^|\/)Cargo\.toml$/i,                            kind:"Rust",        w:3 },
+    { re:/(^|\/)go\.mod$/i,                                kind:"Go",          w:3 },
+    { re:/(^|\/)(pom\.xml|build\.gradle)$/i,               kind:"Java",        w:3 },
+    // 这两个是扩展名，前面还有项目名，不能要求紧跟分隔符
+    { re:/\.(sln|csproj|fsproj|vbproj)$/i,                 kind:".NET",        w:3 },
+    { re:/(^|\/)project\.godot$/i,                         kind:"Godot",       w:3 },
+    { re:/\.uproject$/i,                                   kind:"Unreal",      w:3 },
+    { re:/(^|\/)(composer\.json|Gemfile|mix\.exs|deno\.json)$/i, kind:"其他",   w:3 },
+    { re:/(^|\/)requirements\.txt$/i,                      kind:"Python",      w:2 },
+    { re:/(^|\/)conf\.lua$/i,                              kind:"LÖVE 2D",     w:2 },
+    // 单文件网页作品也是项目，配合 README 就能过线
+    { re:/(^|\/)index\.html$/i,                            kind:"网页 / 单文件", w:2 }
+  ];
+  // 低于这个分不认为是项目
+  var PROJECT_MIN = 3;
+
+  function scoreDir(files){
+    var score = 0, kind = null, ev = null;
+    for (var i=0;i<MANIFEST.length;i++){
+      var hit = anyPath(files, MANIFEST[i].re);
+      if (hit){ score += MANIFEST[i].w; kind = MANIFEST[i].kind; ev = hit; break; }
+    }
+    var srcN = countPath(files, RE_SRC);
+    if (anyPath(files, /(^|\/)(src|lib|app|cmd|internal)\//i)) score += 2;
+    else if (srcN >= 3) score += 2;
+    else if (srcN >= 1) score += 1;
+    if (anyPath(files, /README/i)) score += 1;
+    return { score: score, kind: kind, evidence: ev, files: files.length };
+  }
+
+  function detectProjects(paths){
+    var root = paths.length ? paths[0].split("/")[0] : null;
+    if (!root) return { isSingle:false, root:null, top:null, projects:[], reason:"空目录" };
+
+    // 顶层自己的文件（不含子目录里的）
+    var topFiles = paths.filter(function(p){ return p.split("/").length === 2; });
+    var top = scoreDir(topFiles);
+    if (top.score >= PROJECT_MIN){
+      return { isSingle:true, root:root, top:top, projects:[],
+               reason:"顶层有项目标志物" + (top.evidence ? "：" + top.evidence.split("/").pop() : "") };
+    }
+
+    // 顶层不像项目，往下扫一层
+    var groups = {};
+    paths.forEach(function(p){
+      var seg = p.split("/");
+      if (seg.length < 3) return;
+      var key = seg[0] + "/" + seg[1];
+      (groups[key] = groups[key] || []).push(p);
+    });
+
+    var projects = [];
+    Object.keys(groups).forEach(function(k){
+      var s = scoreDir(groups[k]);
+      if (s.score >= PROJECT_MIN){
+        projects.push({ path:k, name:k.split("/")[1], kind:s.kind || "未识别",
+                        files:groups[k].length, score:s.score, evidence:s.evidence });
+      }
+    });
+    projects.sort(function(a,b){ return b.score - a.score || b.files - a.files; });
+
+    return { isSingle:false, root:root, top:top, projects:projects,
+             reason: projects.length
+               ? "顶层不像单个项目，子目录里找到 " + projects.length + " 个候选"
+               : "没找到项目标志物，这一层可能只是普通文件夹" };
+  }
+
   function topExt(paths, n){
     var m = {};
     paths.forEach(function(p){
@@ -467,31 +577,43 @@
     if (!files.length) return Promise.resolve(null);
     var root = files[0].webkitRelativePath.split(/[\\/]/)[0];
     return readTexts(files).then(function(texts){
+      var allPaths = files.map(function(f){ return f.webkitRelativePath.replace(/\\/g,"/"); });
       CACHE[label] = {
-        paths: files.map(function(f){ return f.webkitRelativePath.replace(/\\/g,"/"); }),
+        paths: allPaths,
         texts: texts,
         root: root,
-        fileCount: files.length
+        fileCount: files.length,
+        boundary: detectProjects(allPaths)
       };
       return buildData(label, profileId);
     });
   }
 
-  // 换模板时不用重读文件，直接按原数据重算
-  function buildData(label, profileId){
+  // 换模板 / 切换子项目时不用重读文件，直接按原数据重算
+  // scope 传子目录路径（如 "workspace/antgame"）就只分析那一棵
+  function buildData(label, profileId, scope){
     var c = CACHE[label];
     if (!c) return null;
     var paths = c.paths, texts = c.texts;
+    if (scope){
+      var pre = scope + "/";
+      var fp = paths.filter(function(p){ return p.indexOf(pre) === 0; });
+      var ft = texts.filter(function(t){ return t.path.indexOf(pre) === 0; });
+      if (!fp.length) return null;
+      paths = fp; texts = ft;
+    }
     var type = detectType(paths, texts);
     var auto = detectProfile(paths, texts, type);
     var pid  = profileId || auto;
     var prof = getProfile(pid);
+    var name = scope ? scope.split("/").pop() : c.root;
 
     var d = {
       label: label,
       root: c.root,
-      name: c.root,
-      files: c.fileCount,
+      name: name,
+      scope: scope || null,
+      files: paths.length,
       dirs: new Set(paths.map(function(p){ return p.split("/").slice(0,-1).join("/"); })).size,
       exts: topExt(paths, 5),
       profile: prof.id,
@@ -499,6 +621,7 @@
       profileTag: prof.tag,
       auto: auto,
       type: type,
+      boundary: c.boundary || null,
       phases: detectPhases(paths, prof, texts),
       artifacts: detectArtifacts(paths, prof, texts),
       eng: detectEngineering(paths, texts)
@@ -851,6 +974,98 @@
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
+  // —— 建议勾选状态：label -> [bool]，默认全选 ——
+  var SEL = {};
+  function initSel(label, n){
+    if (!SEL[label] || SEL[label].length !== n){
+      SEL[label] = [];
+      for (var i=0;i<n;i++) SEL[label].push(true);
+    }
+  }
+  function isSel(label, i){ return SEL[label] ? !!SEL[label][i] : true; }
+  function resetSel(label){ delete SEL[label]; }
+
+  var PRI_DESC = { P0:"最高优先", P1:"高", P2:"中", P3:"低" };
+
+  // —— 把分析结果渲染成一段能直接喂给 AI 的提示词 ——
+  function genPrompt(d){
+    var L = [];
+    L.push("# 项目结构分析：请帮我补齐缺口");
+    L.push("");
+    L.push("我用结构分析工具扫描了一个本地项目，下面是自动得出的结论。");
+    L.push("请基于这些信息给出**具体可执行**的修复方案。");
+    L.push("");
+    L.push("## 一、项目概况");
+    L.push("");
+    L.push("- 名称：" + d.name);
+    L.push("- 检测类型：" + d.type);
+    L.push("- 分析模板：" + d.profileName + "（" + d.profileTag + "）");
+    L.push("- 规模：" + d.files + " 个文件 / " + d.dirs + " 个目录");
+    if (d.exts.length){
+      L.push("- 主要文件类型：" + d.exts.map(function(e){ return "." + e.ext + " ×" + e.n; }).join("、"));
+    }
+    if (d.intro && d.intro.title){
+      L.push("- 项目自述：" + d.intro.title + (d.intro.body ? " —— " + d.intro.body : ""));
+    }
+    if (d.scope){
+      L.push("- 说明：这是从 " + d.root + " 里识别出的子项目，完整路径 " + d.scope);
+    }
+
+    var done = d.phases.list.filter(function(p){ return p.done; });
+    var undo = d.phases.list.filter(function(p){ return !p.done; });
+    L.push("");
+    L.push("## 二、流程进度（" + done.length + "/" + d.phases.list.length + "）");
+    L.push("");
+    L.push("- 已完成：" + (done.length ? done.map(function(p){ return p.name; }).join("、") : "无"));
+    L.push("- 未完成：" + (undo.length ? undo.map(function(p){ return p.name; }).join("、") : "无"));
+    if (d.phases.cur >= 0){
+      L.push("- 当前阶段：**" + d.phases.list[d.phases.cur].name + "**");
+    }
+
+    L.push("");
+    L.push("## 三、产物齐全度");
+    L.push("");
+    L.push("| 产物 | 状态 | 证据 |");
+    L.push("| --- | --- | --- |");
+    d.artifacts.forEach(function(a){
+      L.push("| " + a.label + " | " + (a.has ? "有" : "缺") + " | " + (a.evidence || "—") + " |");
+    });
+    L.push("");
+    L.push("- CI 流水线：" + (d.eng.ci ? "有" : "缺") +
+           "　测试文件：" + (d.eng.test || "缺") +
+           "　README：" + (d.eng.readme ? "有" : "缺"));
+
+    L.push("");
+    L.push("## 四、需要补齐的缺口");
+    L.push("");
+    var picked = [];
+    d.advice.forEach(function(a, i){ if (isSel(d.label, i)) picked.push(a); });
+    if (!picked.length){
+      L.push("（一项都没勾选，请就整体结构给出你的看法）");
+    } else {
+      ["P0", "P1", "P2", "P3"].forEach(function(pri){
+        var grp = picked.filter(function(a){ return a.pri === pri; });
+        if (!grp.length) return;
+        L.push("### " + pri + "（" + PRI_DESC[pri] + "）");
+        L.push("");
+        grp.forEach(function(a, i){
+          L.push((i + 1) + ". **" + a.title + "**　`[" + a.tag + "]`");
+          L.push("   - 该做什么：" + a.detail);
+          L.push("   - 为什么：" + a.why);
+          L.push("");
+        });
+      });
+    }
+
+    L.push("## 五、我希望你做这些");
+    L.push("");
+    L.push("1. 针对上面每一项缺口，给出**具体要创建或修改哪些文件**、每个文件**该写什么内容**——能给草稿就给草稿，不要只说「建议补充文档」这种空话。");
+    L.push("2. 如果某几项对这种规模、这种类型的项目其实不重要，直接说可以跳过，并说明理由。");
+    L.push("3. 如果缺口的补齐顺序存在依赖（比如先有设计文档才好写实现），请指出先后顺序。");
+    L.push("4. 给出的目录结构、命令和配置要能直接复制使用。");
+    return L.join("\n");
+  }
+
   function renderCard(d){
     var phDone = d.phases.list.filter(function(p){ return p.done; }).length;
     var h = '<div class="card" id="card-' + d.label + '">';
@@ -918,14 +1133,34 @@
     }
 
     if (d.advice && d.advice.length){
-      h += '<h3>优化建议（按优先级）</h3>';
-      d.advice.forEach(function(a){
-        h += '<div class="adv">' +
+      initSel(d.label, d.advice.length);
+      h += '<h3>优化建议（按优先级 · 勾选后可导出提示词）</h3>';
+      h += '<div class="expbtns" style="margin-bottom:10px">' +
+           '<button data-act="selall" data-label="' + d.label + '">全选</button>' +
+           '<button data-act="selp01" data-label="' + d.label + '">只选 P0/P1</button>' +
+           '<button data-act="selnone" data-label="' + d.label + '">全不选</button>' +
+           '</div>';
+      d.advice.forEach(function(a, i){
+        var on = isSel(d.label, i);
+        h += '<div class="adv' + (on ? '' : ' off') + '">' +
+             '<input type="checkbox" class="ckbox" data-label="' + d.label + '" data-i="' + i + '"' +
+             (on ? ' checked' : '') + '>' +
              '<div class="ah"><span class="pri ' + a.pri + '">' + a.pri + '</span>' +
              '<span class="atag">' + esc(a.tag) + '</span><b>' + esc(a.title) + '</b></div>' +
              '<div class="adetail">' + esc(a.detail) + '</div>' +
              '<div class="awhy">为什么：' + esc(a.why) + '</div></div>';
       });
+      h += '<div class="exp">' +
+           '<div class="expbtns">' +
+           '<button data-act="gen" data-label="' + d.label + '">生成提示词</button>' +
+           '<button data-act="copy" data-label="' + d.label + '">复制</button>' +
+           '<button data-act="dl" data-label="' + d.label + '">下载 .md</button>' +
+           '<span class="expcount" id="cnt-' + d.label + '">已选 ' +
+             d.advice.filter(function(a, i){ return isSel(d.label, i); }).length +
+             ' / ' + d.advice.length + ' 项</span>' +
+           '</div>' +
+           '<div class="prev hide" id="prev-' + d.label + '"></div>' +
+           '</div>';
     } else {
       h += '<h3>优化建议</h3><div class="empty">该有的都有了，没查出需要补的项。</div>';
     }
@@ -976,18 +1211,51 @@
     return h;
   }
 
+  // 顶部提示：这一层到底是不是一个项目？不是的话列出子项目让用户可以切过去
+  function renderBoundary(d){
+    var b = d.boundary;
+    if (!b || b.isSingle) return "";
+    var cur = SCOPE[d.label] || null;
+    var h = '<div class="bnd">';
+    if (b.projects.length){
+      h += '<div class="bndt">这个目录不像单个项目</div>';
+      h += '<div class="bndd">' + esc(b.reason) +
+           '。下面的结果是把整层当一个项目算的，可能不准——点某个子项目就只看它，不用重新选文件夹。</div>';
+      h += '<div class="chips">';
+      h += '<button class="chip' + (cur ? '' : ' on') + '" data-act="scope" data-which="' + d.label +
+           '" data-scope=""><span class="cn">整个目录</span><span class="ck">' +
+           CACHE[d.label].fileCount + ' 个文件</span></button>';
+      b.projects.forEach(function(p){
+        h += '<button class="chip' + (cur === p.path ? ' on' : '') + '" data-act="scope" data-which="' +
+             d.label + '" data-scope="' + esc(p.path) + '"><span class="cn">' + esc(p.name) +
+             '</span><span class="ck"><b>' + esc(p.kind) + '</b> · ' + p.files + ' 个文件</span></button>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="bndt">没找到项目标志物</div>';
+      h += '<div class="bndd">' + esc(b.reason) +
+           '。这一层可能只是个普通文件夹（纯文档、素材、归档之类）。' +
+           '如果项目在更深的目录里，直接把那一层选进来会准得多。</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
   function render(){
     var out = document.getElementById("out");
     if (!A && !B){ out.innerHTML = '<div class="empty">还没有选择项目目录。</div>'; return; }
     if (mode === "compare"){
       if (!A || !B){ out.innerHTML = '<div class="empty">对比模式需要同时选择项目 A 和项目 B。</div>'; return; }
       // 对比必须同模板，否则阶段与产物对不齐，没有可比性
-      if (B.profile !== A.profile) B = buildData("B", A.profile);
+      if (B.profile !== A.profile) B = buildData("B", A.profile, SCOPE.B);
       out.innerHTML = renderCompare(A, B);
     } else {
       var items = [A, B].filter(Boolean);
-      out.innerHTML = '<div class="grid' + (items.length > 1 ? " two" : "") + '">' +
+      var h = "";
+      items.forEach(function(d){ h += renderBoundary(d); });
+      h += '<div class="grid' + (items.length > 1 ? " two" : "") + '">' +
         items.map(renderCard).join("") + '</div>';
+      out.innerHTML = h;
     }
   }
 
@@ -1005,10 +1273,80 @@
   }
 
   function applyProfile(pid){
-    if (A) A = buildData("A", pid || A.auto);
-    if (B) B = buildData("B", pid || B.auto);
+    if (A) A = buildData("A", pid || A.auto, SCOPE.A);
+    if (B) B = buildData("B", pid || B.auto, SCOPE.B);
     updateSlots();
     render();
+  }
+
+  // 切换到某个子项目（scope 为空表示回到整个目录）
+  function setScope(which, scope){
+    SCOPE[which] = scope || null;
+    resetSel(which);
+    var forced = document.getElementById("selProfile").value || null;
+    var d = buildData(which, forced, SCOPE[which]);
+    if (!d) return;
+    if (which === "A") A = d; else B = d;
+    updateSlots();
+    render();
+  }
+
+  var toastTimer = null;
+  function toast(msg){
+    var el = document.getElementById("toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = "toast show";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ el.className = "toast"; }, 1800);
+  }
+
+  function copyText(t){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(t).then(function(){ toast("已复制到剪贴板"); });
+    }
+    // file:// 下 clipboard API 可能不可用，退回到老办法
+    try{
+      var ta = document.createElement("textarea");
+      ta.value = t;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      toast("已复制到剪贴板");
+    }catch(e){
+      toast("复制失败，请手动选中预览框里的文字");
+    }
+    return Promise.resolve();
+  }
+
+  function download(name, text){
+    var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("已下载 " + name);
+  }
+
+  function currentData(label){ return label === "A" ? A : B; }
+
+  function refreshPrompt(label){
+    var d = currentData(label);
+    if (!d) return "";
+    var txt = genPrompt(d);
+    var prev = document.getElementById("prev-" + label);
+    if (prev){
+      prev.textContent = txt;
+      prev.className = "prev";
+    }
+    return txt;
   }
 
   function load(which, input){
@@ -1048,8 +1386,63 @@
     document.getElementById("slotA").textContent = "项目 A：未选择";
     document.getElementById("slotB").className = "slot";
     document.getElementById("slotB").textContent = "项目 B：未选择（对比模式需要）";
+    SCOPE.A = null; SCOPE.B = null;
+    SEL = {};
     setMode("single");
   };
+
+  // 卡片里的按钮和勾选框都是 render 出来的，用事件委托统一处理
+  var outEl = document.getElementById("out");
+  outEl.addEventListener("click", function(e){
+    var btn = e.target.closest ? e.target.closest("button[data-act]") : null;
+    if (!btn) return;
+    var act = btn.getAttribute("data-act");
+    var label = btn.getAttribute("data-label");
+    var which = btn.getAttribute("data-which");
+
+    if (act === "scope"){ setScope(which, btn.getAttribute("data-scope")); return; }
+
+    var d = currentData(label);
+    if (!d) return;
+    if (act === "selall" || act === "selnone" || act === "selp01"){
+      for (var i=0;i<d.advice.length;i++){
+        SEL[label][i] = act === "selall" ? true
+                      : act === "selnone" ? false
+                      : (d.advice[i].pri === "P0" || d.advice[i].pri === "P1");
+      }
+      render();
+      refreshPromptIfOpen(label);
+      return;
+    }
+    if (act === "gen"){ refreshPrompt(label); toast("提示词已生成"); return; }
+    if (act === "copy"){ copyText(genPrompt(d)); return; }
+    if (act === "dl"){
+      download("项目分析-" + d.name + ".md", genPrompt(d));
+      return;
+    }
+  });
+
+  outEl.addEventListener("change", function(e){
+    var cb = e.target;
+    if (!cb.classList || !cb.classList.contains("ckbox")) return;
+    var label = cb.getAttribute("data-label");
+    var i = +cb.getAttribute("data-i");
+    if (!SEL[label]) return;
+    SEL[label][i] = cb.checked;
+    cb.parentNode.className = "adv" + (cb.checked ? "" : " off");
+    var cnt = document.getElementById("cnt-" + label);
+    if (cnt){
+      var n = SEL[label].filter(Boolean).length;
+      cnt.textContent = "已选 " + n + " / " + SEL[label].length + " 项";
+    }
+    refreshPromptIfOpen(label);
+  });
+
+  // 预览框已经打开的话，勾选变化后跟着刷新
+  function refreshPromptIfOpen(label){
+    var prev = document.getElementById("prev-" + label);
+    if (prev && prev.className === "prev") refreshPrompt(label);
+  }
 
   // 模板下拉框
   var selP = document.getElementById("selProfile");
@@ -1065,6 +1458,10 @@
   window.__PA = {
     analyze: analyze, buildData: buildData,
     detectType: detectType, detectProfile: detectProfile,
+    detectProjects: detectProjects, scoreDir: scoreDir,
+    genPrompt: genPrompt, MANIFEST: MANIFEST, PROJECT_MIN: PROJECT_MIN,
+    // 下划线前缀 = 给测试用的内部接口
+    _setSel: function(label, arr){ SEL[label] = arr; },
     detectPhases: detectPhases, detectArtifacts: detectArtifacts,
     detectEngineering: detectEngineering, genIntro: genIntro, inferModules: inferModules,
     PROFILES: PROFILES, getProfile: getProfile

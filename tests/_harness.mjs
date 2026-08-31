@@ -18,8 +18,12 @@ function mkEl(id) {
     onclick: null,
     onchange: null,
     children: [],
+    handlers: {},
     appendChild(c) { this.children.push(c); return c; },
+    removeChild(c) { return c; },
+    addEventListener(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); },
     click() {},
+    select() {},
   };
 }
 

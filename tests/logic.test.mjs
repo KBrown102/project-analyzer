@@ -329,10 +329,149 @@ const b = fs.readFileSync(path.join(root, "build-electron", "project-analyzer.ht
 C.ok("build-electron/project-analyzer.html 与根文件一致", a === b,
   a === b ? "" : `根 ${a.length} 字节 vs 副本 ${b.length} 字节`);
 
+// ── 14. 项目边界识别 ───────────────────────────────────────────
+console.log("\n[14] 项目边界识别");
+
+// 一个工作区：顶层只有散碎文件，两个真项目在子目录里，
+// 外加一个纯文档目录（不该被当成项目）
+const WS = {
+  "workspace/README.md": "# 我的工作区\n",
+  "workspace/随手记.md": "# 随手记\n",
+  "workspace/antgame/package.json": '{"name":"antgame","dependencies":{"pixi":"^7"}}',
+  "workspace/antgame/src/main.js": 'import PIXI from "pixi";\n',
+  "workspace/antgame/README.md": "# 蚂蚁沙盒\n",
+  "workspace/webtool/index.html": "<canvas></canvas><script>requestAnimationFrame(loop)</script>",
+  "workspace/webtool/README.md": "# 小工具\n",
+  "workspace/notes/a.md": "# A\n",
+  "workspace/notes/b.md": "# B\n",
+  "workspace/notes/c.md": "# C\n",
+  "workspace/notes/d.md": "# D\n",
+};
+
+const wsD = await run(WS, "ws");
+const bnd = wsD.boundary;
+C.ok("工作区 不是单项目", bnd.isSingle === false);
+C.eq("识别出 2 个子项目", bnd.projects.length, 2);
+C.eq("子项目是 antgame 与 webtool",
+  bnd.projects.map((p) => p.name).sort().join(","), "antgame,webtool");
+C.ok("纯文档的 notes/ 没被当成项目", !bnd.projects.some((p) => p.name === "notes"));
+C.ok("每个子项目都带 kind 和文件数",
+  bnd.projects.every((p) => p.kind && typeof p.files === "number"));
+C.ok("子项目按得分降序",
+  bnd.projects.every((p, i) => i === 0 || bnd.projects[i - 1].score >= p.score));
+C.ok("reason 里说明了找到几个", /2 个候选/.test(bnd.reason), bnd.reason);
+// kind 必须验：光断言「识别出来了」不够——靠弱信号也能识别，但类型会退化成「未识别」
+C.eq("antgame 认出是 Node 项目",
+  bnd.projects.find((p) => p.name === "antgame").kind, "Node / 前端");
+C.eq("webtool 认出是网页项目",
+  bnd.projects.find((p) => p.name === "webtool").kind, "网页 / 单文件");
+
+// 顶层自带 manifest → 就是单项目，不该弹提示
+const solo = await run({
+  "myapp/package.json": '{"main":"x.js"}',
+  "myapp/src/a.js": "var a=1;\n",
+  "myapp/README.md": "# app\n",
+}, "solo");
+C.ok("顶层有 package.json → 判定为单项目", solo.boundary.isSingle === true);
+C.eq("单项目时 projects 为空", solo.boundary.projects.length, 0);
+C.ok("reason 指出是标志物", /标志物/.test(solo.boundary.reason), solo.boundary.reason);
+
+// 谁都不像项目
+const junk = await run({ "junk/图片 1.png": null, "junk/说明.txt": "随便放的东西\n" }, "junk");
+C.ok("没有标志物时 isSingle=false", junk.boundary.isSingle === false);
+C.eq("没有标志物时 projects 为空", junk.boundary.projects.length, 0);
+C.ok("reason 提示可能只是普通文件夹", /普通文件夹/.test(junk.boundary.reason), junk.boundary.reason);
+
+console.log("\n[14b] 各类项目标志物");
+const manifestCases = [
+  ["package.json", "Node / 前端"],
+  ["pyproject.toml", "Python"],
+  ["Cargo.toml", "Rust"],
+  ["go.mod", "Go"],
+  ["pom.xml", "Java"],
+  ["app.sln", ".NET"],
+  ["project.godot", "Godot"],
+  ["game.uproject", "Unreal"],
+  ["composer.json", "其他"],
+];
+// manifest 必须放在子目录里：放顶层的话整层就会被判成单项目，projects 是空的
+for (const [file, kind] of manifestCases) {
+  const d = await run({
+    ["hub/proj/" + file]: "x\n",
+    "hub/proj/README.md": "# p\n",
+    "hub/proj/src/main.js": "var a=1;\n",
+  }, "m-" + file);
+  C.ok(`${file} 所在目录被识别为项目`, d.boundary.projects.length === 1,
+    `实际 ${d.boundary.projects.length} 个`);
+  const p = d.boundary.projects[0];
+  C.ok(`${file} → ${kind}`, p && p.kind === kind, p ? p.kind : "未识别");
+}
+
+// ── 15. 切换子项目（scope）────────────────────────────────────
+console.log("\n[15] 切换子项目");
+const subGame = api.buildData("ws", null, "workspace/antgame");
+C.ok("切到子项目后能出结果", subGame !== null);
+C.eq("子项目 name 取最后一段", subGame.name, "antgame");
+C.eq("子项目只统计自己的文件", subGame.files, 3);
+C.ok("子项目 root 仍记着顶层目录", subGame.root === "workspace");
+C.eq("scope 字段被记录", subGame.scope, "workspace/antgame");
+C.ok("子项目单独判出了游戏类型", /游戏/.test(subGame.type), subGame.type);
+
+const subTool = api.buildData("ws", null, "workspace/webtool");
+C.eq("webtool 单独分析只有 2 个文件", subTool.files, 2);
+C.eq("webtool 判成小游戏模板", subTool.profile, "mini");
+
+const whole = api.buildData("ws", null, null);
+C.eq("scope 为空时回到整个目录", whole.files, 11);
+C.eq("scope 为空时 scope 字段为 null", whole.scope, null);
+C.eq("不存在的 scope 返回 null", api.buildData("ws", null, "workspace/nope"), null);
+C.ok("切子项目不污染顶层结果", api.buildData("ws", null, null).type === wsD.type);
+
+// ── 16. 导出提示词 ─────────────────────────────────────────────
+console.log("\n[16] 导出提示词");
+const pd = await run({
+  "myapp/package.json": '{"main":"x.js"}',
+  "myapp/src/a.js": "var a=1;\n",
+}, "prompt");
+const full = api.genPrompt(pd);
+C.ok("提示词非空", full.length > 200);
+["## 一、项目概况", "## 二、流程进度", "## 三、产物齐全度",
+  "## 四、需要补齐的缺口", "## 五、我希望你做这些"].forEach((sec) => {
+  C.ok(`包含 ${sec}`, full.includes(sec));
+});
+C.ok("包含项目名称", full.includes("myapp"));
+C.ok("包含分析模板", full.includes(pd.profileName));
+C.ok("产物表格有分隔行", full.includes("| --- | --- | --- |"));
+C.ok("默认全选时建议全都在", pd.advice.every((a) => full.includes(a.title)));
+C.ok("每条建议带「该做什么」", pd.advice.every((a) => full.includes(a.detail)));
+C.ok("每条建议带「为什么」", pd.advice.every((a) => full.includes(a.why)));
+
+if (pd.advice.length >= 2) {
+  api._setSel("prompt", pd.advice.map((a, i) => i === 0));
+  const one = api.genPrompt(pd);
+  C.ok("只勾第一项时它还在", one.includes(pd.advice[0].title));
+  C.ok("未勾选项的标题不出现", !one.includes(pd.advice[1].title));
+  C.ok("未勾选项的 detail 也不出现", !one.includes(pd.advice[1].detail));
+
+  api._setSel("prompt", pd.advice.map(() => false));
+  const none = api.genPrompt(pd);
+  C.ok("全不选时有兜底文案", /一项都没勾选/.test(none));
+  C.ok("全不选时不输出任何建议标题", pd.advice.every((a) => !none.includes(a.title)));
+}
+api._setSel("prompt", pd.advice.map(() => true));
+const grouped = api.genPrompt(pd);
+pd.advice.forEach((a) => {
+  C.ok(`优先级分组 ${a.pri} 标题存在`, grouped.includes("### " + a.pri + "（"));
+});
+
+const subPrompt = api.genPrompt(subGame);
+C.ok("子项目提示词标注了来源路径", subPrompt.includes("workspace/antgame"));
+
 // ── 13. 导出的 API 契约 ────────────────────────────────────────
 console.log("\n[13] window.__PA 契约");
 ["analyze", "buildData", "detectType", "detectProfile", "detectPhases", "detectArtifacts",
-  "detectEngineering", "genIntro", "inferModules", "PROFILES", "getProfile"].forEach((k) => {
+  "detectEngineering", "genIntro", "inferModules", "PROFILES", "getProfile",
+  "detectProjects", "scoreDir", "genPrompt"].forEach((k) => {
   C.ok(`__PA.${k} 已暴露`, api[k] !== undefined);
 });
 C.eq("PROFILES 有 7 套", Object.keys(api.PROFILES).length, 7);
