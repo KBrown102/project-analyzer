@@ -106,6 +106,75 @@ const FIX = {
     "myproj/src/api.cs": "class Api {}\n",
     "myproj/src/core.cs": "class Core {}\n",
   },
+
+  // Terraform 基础设施即代码 → iac（硬标志物 *.tf，最先认，不被 server/generic 吞）
+  iac: {
+    "infra/README.md": "# 基础设施\n\n用 Terraform 管云上资源。",
+    "infra/main.tf": 'resource "aws_vpc" "main" {}\n',
+    "infra/variables.tf": 'variable "region" { default = "cn-north-1" }\n',
+    "infra/outputs.tf": 'output "vpc_id" { value = aws_vpc.main.id }\n',
+    "infra/modules/network/main.tf": 'resource "aws_subnet" "s" {}\n',
+    "infra/modules/network/variables.tf": 'variable "cidr" {}\n',
+    "infra/environments/prod/main.tf": 'module "network" { source = "../modules/network" }\n',
+    "infra/environments/prod/backend.tfvars": 'bucket = "tf-state"\n',
+  },
+
+  // STM32 嵌入式固件 → embedded（CMake + HAL/BSP 分层 + 链接脚本 .ld）
+  embedded: {
+    "fw/README.md": "# 固件\n\n基于 STM32 的环境监测节点。",
+    "fw/CMakeLists.txt": "cmake_minimum_required(VERSION 3.20)\n",
+    "fw/Makefile": "all:\n\tarm-none-eabi-gcc $(SRC)\n",
+    "fw/hal/gpio.c": "void gpio_init(void){}\n",
+    "fw/hal/gpio.h": "#ifndef GPIO_H\n#define GPIO_H\n#endif\n",
+    "fw/drivers/uart.c": "void uart_send(char c){}\n",
+    "fw/drivers/uart.h": "#ifndef UART_H\n#define UART_H\n#endif\n",
+    "fw/src/main.c": "int main(void){ gpio_init(); while(1){} }\n",
+    "fw/src/main.h": "#ifndef MAIN_H\n#define MAIN_H\n#endif\n",
+    "fw/linker/stm32.ld": "MEMORY { FLASH : ORIGIN = 0x08000000 }\n",
+  },
+
+  // Chrome MV3 插件 → extension（manifest MV3 + background/content/popup/icons）
+  extension: {
+    "ext/manifest.json": JSON.stringify({
+      manifest_version: 3,
+      name: "我的插件",
+      version: "1.0.0",
+      background: { service_worker: "background.js" },
+      action: { default_popup: "popup/popup.html" },
+      permissions: ["storage"],
+    }),
+    "ext/background.js": "chrome.runtime.onInstalled.addListener(()=>{});\n",
+    "ext/content/inject.js": "console.log('injected');\n",
+    "ext/popup/popup.html": "<!DOCTYPE html><body>弹窗</body></html>\n",
+    "ext/popup/popup.js": "document.body.innerHTML='hi';\n",
+    "ext/options/options.html": "<!DOCTYPE html><body>设置</body></html>\n",
+    "ext/icons/icon16.png": null,
+    "ext/icons/icon48.png": null,
+    "ext/icons/icon128.png": null,
+    "ext/README.md": "# 插件\n\n一个浏览器插件。",
+  },
+
+  // Airflow + 数仓分层 → data（dags/ + etl/ + warehouse ODS→DWD→DWS→ADS）
+  data: {
+    "pipe/README.md": "# 数据管道\n\nETL 与数仓。",
+    "pipe/requirements.txt": "apache-airflow\npyspark\ndbt-core\n",
+    "pipe/dags/etl_dag.py": "from airflow import DAG\ndef build(): pass\n",
+    "pipe/etl/transform.py": "from pyspark.sql import SparkSession\nspark=SparkSession.builder.getOrCreate()\n",
+    "pipe/warehouse/ods/raw_users.py": "rows=[]\n",
+    "pipe/warehouse/dwd/dwd_users.py": "rows=[]\n",
+    "pipe/warehouse/dws/dws_kpi.py": "rows=[]\n",
+    "pipe/warehouse/ads/ads_kpi.py": "rows=[]\n",
+    "pipe/spark/jobs/agg.py": "from pyspark.sql import SparkSession\n",
+  },
+
+  // Python 命令行工具 → cli（package.json bin + argparse + .sh，无后端分层）
+  cli: {
+    "tool/README.md": "# 命令行工具\n\n批量处理文件名。",
+    "tool/package.json": JSON.stringify({ name: "renamer", bin: { renamer: "./cli.js" }, version: "1.0.0" }),
+    "tool/cli.js": "const { program } = require('commander');\nprogram.parse(process.argv);\n",
+    "tool/src/main.py": "import argparse\nparser=argparse.ArgumentParser()\n",
+    "tool/run.sh": "#!/usr/bin/env bash\nnode cli.js \"$@\"\n",
+  },
 };
 
 // ── 1. 每套模板都能被自动识别出来 ──────────────────────────────
@@ -116,8 +185,8 @@ for (const id of PROFILE_ORDER) {
   detected[id] = d;
   C.eq(`${id} → profile`, d.profile, id);
 }
-C.ok("八个 fixture 判出八种模板，无重复",
-  new Set(Object.values(detected).map((d) => d.profile)).size === 8,
+C.ok(`${PROFILE_ORDER.length} 个 fixture 判出 ${PROFILE_ORDER.length} 种模板，无重复`,
+  new Set(Object.values(detected).map((d) => d.profile)).size === PROFILE_ORDER.length,
   [...new Set(Object.values(detected).map((d) => d.profile))].join(","));
 
 // ── 2. 类型识别 ────────────────────────────────────────────────
@@ -174,6 +243,24 @@ const npmLib = await run({
 }, "srv-lib");
 C.ok("npm 库不误判为 server", npmLib.profile !== "server");
 C.eq("npm 库判成 lib", npmLib.profile, "lib");
+
+// ── 2c. 新增 5 类硬核模板识别（用户诉求：插件/CLI/嵌入式/IaC/数据工程）────
+console.log("\n[2c] 硬核 5 类识别");
+C.eq("IaC", detected.iac.type, "基础设施即代码");
+C.eq("嵌入", detected.embedded.type, "嵌入式固件");
+C.eq("插件", detected.extension.type, "浏览器插件");
+C.eq("数据", detected.data.type, "数据工程项目");
+C.eq("CLI", detected.cli.type, "命令行工具");
+// 对照组：React 前端不能误判成这 5 类里的任何一类
+C.ok("React 前端不是 IaC", detected.web.profile !== "iac");
+C.ok("React 前端不是嵌入式", detected.web.profile !== "embedded");
+C.ok("React 前端不是插件", detected.web.profile !== "extension");
+C.ok("React 前端不是数据工程", detected.web.profile !== "data");
+C.ok("React 前端不是 CLI", detected.web.profile !== "cli");
+C.eq("React 前端仍判 web", detected.web.profile, "web");
+// 对照组：Node 后端不能误判成 IaC / 数据工程
+C.ok("Express 后端不是 IaC", detected.server.profile !== "iac");
+C.ok("Express 后端不是数据工程", detected.server.profile !== "data");
 
 // ── 3. 结果结构完整性 ──────────────────────────────────────────
 console.log("\n[3] 结果结构");
@@ -379,8 +466,8 @@ for (const fid of Object.keys(FIX)) {
     }
   }
 }
-C.eq(`8 fixture × 8 模板 = 64 组合全部跑通`, crossFail, 0);
-C.ok(`实际跑了 ${cross} 个组合`, cross === 64);
+C.eq(`${Object.keys(FIX).length} fixture × ${PROFILE_ORDER.length} 模板 = ${Object.keys(FIX).length * PROFILE_ORDER.length} 组合全部跑通`, crossFail, 0);
+C.ok(`实际跑了 ${cross} 个组合`, cross === Object.keys(FIX).length * PROFILE_ORDER.length);
 
 // ── 12. 两份 html 必须一致（electron 打包用的是副本）──────────
 console.log("\n[12] 打包副本同步");
@@ -534,7 +621,7 @@ console.log("\n[13] window.__PA 契约");
   "detectProjects", "scoreDir", "genPrompt"].forEach((k) => {
   C.ok(`__PA.${k} 已暴露`, api[k] !== undefined);
 });
-C.eq("PROFILES 有 8 套", Object.keys(api.PROFILES).length, 8);
+C.eq("PROFILES 套数 = PROFILE_ORDER", Object.keys(api.PROFILES).length, PROFILE_ORDER.length);
 C.ok("getProfile 未知 id 回落 generic", api.getProfile("__nope__").id === "generic");
 
 // ── 汇总 ───────────────────────────────────────────────────────

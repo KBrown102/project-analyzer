@@ -355,10 +355,132 @@
         { key:"CI",      label:"CI 配置",   re:RE_CI }
       ],
       advice: adviceGeneric
+    },
+
+    iac: {
+      id:"iac", name:"基础设施即代码", tag:"声明到可重放",
+      phases:[
+        { id:0, name:"模块化",   re:/(^|\/)modules\//i },
+        { id:1, name:"根模块",   re:/(main|variables|outputs|providers|versions)\.tf$/i },
+        { id:2, name:"环境隔离", re:/\.tfvars$|(^|\/)(environments?|envs)\//i },
+        { id:3, name:"状态与锁", re:/backend|terraform\.tfstate|state\.(tf|lock)|dynamodb/i },
+        { id:4, name:"文档",     re:/terraform-docs|README.*terraform/i },
+        { id:5, name:"安全",     re:/vault|\.gitignore|secret/i },
+        { id:6, name:"CI 计划",  re:RE_CI }
+      ],
+      artifacts:[
+        { key:"README",  label:"README",        re:RE_DOC },
+        { key:"MODULES", label:"可复用模块",     re:/(^|\/)modules\//i },
+        { key:"ROOT",    label:"根模块文件",     re:/(main|variables|outputs|providers|versions)\.tf$/i },
+        { key:"ENV",     label:"环境配置",       re:/\.tfvars$|(^|\/)(environments?|envs)\//i },
+        { key:"STATE",   label:"远端状态锁",     re:/backend|terraform\.tfstate|state\.(tf|lock)|dynamodb/i },
+        { key:"DOCS",    label:"模块文档",       re:/terraform-docs/i },
+        { key:"SECRET",  label:"密钥管理",       re:/vault|\.gitignore|secret/i },
+        { key:"CI",      label:"CI 配置",        re:RE_CI }
+      ],
+      advice: adviceIac
+    },
+
+    embedded: {
+      id:"embedded", name:"嵌入式固件", tag:"分层到可烧录",
+      phases:[
+        { id:0, name:"分层结构", re:/(^|\/)(hal|bsp|drivers?|services?|middleware|app)\//i },
+        { id:1, name:"硬件抽象", re:/(^|\/)(hal|drivers?)\//i },
+        { id:2, name:"构建系统", re:/CMakeLists\.txt$|Makefile$/i },
+        { id:3, name:"板级与链接", re:/(^|\/)(bsp|board)\/|\.ld$|\.sct$/i },
+        { id:4, name:"测试",     re:/(^|\/)(tests?|test)\//i },
+        { id:5, name:"文档",     re:/(^|\/)docs\/|HW-SW|hardware|design\.md/i },
+        { id:6, name:"固件交付", re:/(\.bin|\.hex|ota|sign|flash)/i }
+      ],
+      artifacts:[
+        { key:"README",  label:"README",     re:RE_DOC },
+        { key:"LAYER",   label:"分层目录",    re:/(^|\/)(hal|bsp|drivers?|services?|app)\//i },
+        { key:"BUILD",   label:"构建系统",    re:/CMakeLists\.txt$|Makefile$/i },
+        { key:"LINK",    label:"链接脚本",    re:/\.ld$|\.sct$/i },
+        { key:"TEST",    label:"测试",        re:RE_TEST },
+        { key:"DOCS",    label:"硬件接口文档", re:/(^|\/)docs\/|HW-SW|hardware/i },
+        { key:"OTA",     label:"固件签名/OTA", re:/(\.bin|\.hex|ota|sign|flash)/i }
+      ],
+      advice: adviceEmbedded
+    },
+
+    extension: {
+      id:"extension", name:"浏览器插件", tag:"清单到上架",
+      phases:[
+        { id:0, name:"清单合规", re:/manifest\.json$/i },
+        { id:1, name:"后台逻辑", re:/(^|\/)(background|service[-_]?worker)\.(js|ts)$/i },
+        { id:2, name:"内容脚本", re:/(^|\/)(content|content[-_]?scripts)\//i },
+        { id:3, name:"弹窗选项", re:/(^|\/)(popup|options)\//i },
+        { id:4, name:"存储通信", re:/chrome\.storage|chrome\.runtime|sendMessage|storage\.local/i },
+        { id:5, name:"构建测试", re:/(vite|webpack|rollup|vitest|playwright)|(^|\/)tests?\//i },
+        { id:6, name:"发布清单", re:/_locales|CHANGELOG|web[-_]?store|\.pem$/i }
+      ],
+      artifacts:[
+        { key:"README",   label:"README",      re:RE_DOC },
+        { key:"MANIFEST", label:"MV3 清单",     re:/manifest\.json$/i },
+        { key:"BG",       label:"后台脚本",      re:/(^|\/)(background|service[-_]?worker)\./i },
+        { key:"CONTENT",  label:"内容脚本",      re:/(^|\/)(content|content[-_]?scripts)\//i },
+        { key:"POPUP",    label:"弹窗/选项页",   re:/(^|\/)(popup|options)\//i },
+        { key:"ICONS",    label:"图标 16/48/128", re:/(^|\/)icons\//i },
+        { key:"STORE",    label:"上架材料",      re:/_locales|CHANGELOG|web[-_]?store/i },
+        { key:"TEST",     label:"测试",         re:RE_TEST },
+        { key:"CI",       label:"CI 配置",       re:RE_CI }
+      ],
+      advice: adviceExtension
+    },
+
+    data: {
+      id:"data", name:"数据工程", tag:"接入到服务",
+      phases:[
+        { id:0, name:"分层架构", re:/(^|\/)warehouse\/(ods|dwd|dws|ads|dim)\//i },
+        { id:1, name:"接入",     re:/(^|\/)(extract|ingestion|sources?)\//i },
+        { id:2, name:"转换",     re:/(^|\/)(transform|processing)\//i },
+        { id:3, name:"编排",     re:/(^|\/)dags\/|airflow/i },
+        { id:4, name:"数据质量", re:/(quality|dq|validation|schema)/i },
+        { id:5, name:"环境隔离", re:/(^|\/)(config|conf|environments?)\/|\.env/i },
+        { id:6, name:"可观测",   re:/(logs?|monitor|observ|metrics)/i },
+        { id:7, name:"测试",     re:RE_TEST }
+      ],
+      artifacts:[
+        { key:"README",   label:"README",        re:RE_DOC },
+        { key:"LAYER",    label:"数仓分层",       re:/(^|\/)warehouse\/(ods|dwd|dws|ads|dim)\//i },
+        { key:"INGEST",   label:"接入脚本",       re:/(^|\/)(extract|ingestion|sources?)\//i },
+        { key:"TRANSFORM",label:"转换脚本",       re:/(^|\/)(transform|processing)\//i },
+        { key:"ORCH",     label:"调度编排",       re:/(^|\/)dags\/|airflow/i },
+        { key:"QUALITY",  label:"质量规则",       re:/(quality|dq|validation)/i },
+        { key:"CONFIG",   label:"环境配置",       re:/(^|\/)(config|conf|environments?)\/|\.env/i },
+        { key:"OBS",      label:"日志监控",       re:/(logs?|monitor|observ|metrics)/i },
+        { key:"TEST",     label:"测试",           re:RE_TEST }
+      ],
+      advice: adviceData
+    },
+
+    cli: {
+      id:"cli", name:"命令行工具", tag:"入口到分发",
+      phases:[
+        { id:0, name:"入口参数", re:/(^|\/)__main__\.py$|(^|\/)bin\/|package\.json.*bin|(^|\/)(cmd|cli|commands?)\//i },
+        { id:1, name:"行为输出", re:/(^|\/)(commands?|cmd|handlers?)\//i },
+        { id:2, name:"文档",     re:/--help|usage/i },
+        { id:3, name:"配置环境", re:/(^|\/)(config|conf|settings)\/|\.env|argparse|click/i },
+        { id:4, name:"可组合",   re:/(stdin|stdout|pipe|exit[-_]?code)/i },
+        { id:5, name:"测试",     re:RE_TEST },
+        { id:6, name:"安装分发", re:/setup\.py|pyproject|package\.json.*bin|brew\.rb|\.sh$/i }
+      ],
+      artifacts:[
+        { key:"README",   label:"README",      re:RE_DOC },
+        { key:"ENTRY",    label:"入口脚本",     re:/(^|\/)__main__\.py$|(^|\/)bin\/|\.sh$/i },
+        { key:"HELP",     label:"用法说明",     re:/--help|usage/i },
+        { key:"CONFIG",   label:"配置/环境",    re:/(^|\/)(config|conf|settings)\/|\.env/i },
+        { key:"PIPE",     label:"管道/退出码",   re:/(stdin|stdout|pipe|exit[-_]?code)/i },
+        { key:"TEST",     label:"测试",         re:RE_TEST },
+        { key:"CI",       label:"CI 配置",       re:RE_CI },
+        { key:"INSTALL",  label:"安装分发",      re:/setup\.py|pyproject|package\.json.*bin|brew\.rb/i }
+      ],
+      advice: adviceCli
     }
   };
 
-  var PROFILE_ORDER = ["game","web","server","lib","mini","tool","meta","generic"];
+  var PROFILE_ORDER = ["game","web","server","iac","embedded","extension","data","cli","lib","mini","tool","meta","generic"];
 
   function getProfile(id){ return PROFILES[id] || PROFILES.generic; }
 
@@ -368,6 +490,10 @@
   function detectType(paths, texts){
     var joined = texts.map(function(t){ return t.path + " " + t.text.slice(0, 400); }).join("\n").slice(0, 40000);
     if (anyPath(paths, /project\.godot$/)) return "Godot 游戏";
+    if (iacScore(paths, texts) >= 3) return "基础设施即代码";
+    if (embeddedScore(paths, texts) >= 3) return "嵌入式固件";
+    if (extensionScore(paths, texts) >= 3) return "浏览器插件";
+    if (dataScore(paths, texts) >= 3) return "数据工程项目";
     if (anyPath(paths, /conf\.lua$/) && anyPath(paths, /main\.lua$/)) return "LÖVE 2D 游戏";
     if (anyPath(paths, /ProjectSettings\//) || anyPath(paths, /\.unity$/)) return "Unity 项目";
     if (anyPath(paths, /\.uproject$/)) return "Unreal 项目";
@@ -388,6 +514,7 @@
       if (!hasFrontendSignal(paths) && serverScore(paths, texts) >= 3) return "Node 后端服务";
       if (anyPath(paths, /\.(tsx|jsx|vue|svelte)$/i) ||
           anyPath(paths, /(^|\/)(pages|views|components|styles|public)\//i)) return "Node / 前端工程";
+      if (cliScore(paths, texts) >= 3) return "命令行工具";
       return "Node 工程";
     }
     if (anyPath(paths, /requirements\.txt$|pyproject\.toml$|\.py$/)) return "Python 项目";
@@ -438,6 +565,74 @@
            !!anyPath(paths, /(^|\/)(pages|views|components|styles|public)\//i);
   }
 
+  // —— 基础设施即代码（Terraform 等）信号打分 ——
+  function iacScore(paths, texts){
+    var s = 0;
+    if (anyPath(paths, /\.tf$/i)) s += 3;
+    if (anyPath(paths, /(^|\/)modules\//i)) s += 2;
+    if (anyPath(paths, /\.tfvars$/i)) s += 1;
+    if (anyPath(paths, /(main|variables|outputs|providers|versions)\.tf$/i)) s += 1;
+    if (anyPath(paths, /(^|\/)(terraform|environments?|envs)\//i)) s += 1;
+    return s;
+  }
+
+  // —— 嵌入式固件信号打分 ——
+  function embeddedScore(paths, texts){
+    var s = 0;
+    if (anyPath(paths, /CMakeLists\.txt$|Makefile$|(^|\/)build\.mk$/i)) s += 2;
+    if (anyPath(paths, /(^|\/)(hal|bsp|drivers?|mcu|soc)\//i)) s += 2;
+    if (anyPath(paths, /\.ld$|\.sct$/i)) s += 2;
+    if (anyPath(paths, /\.ioc$|\.mxproject$|\.cproject$/i)) s += 1;
+    if (anyPath(paths, /(^|\/)(src|app)\/.*\.(c|cpp|cc|h|hpp)$/i)) s += 1;
+    if (anyPath(paths, /(^|\/)linker\//i)) s += 1;
+    return s;
+  }
+
+  // —— 浏览器插件信号打分 ——
+  function extensionScore(paths, texts){
+    var s = 0;
+    var m = anyPath(paths, /manifest\.json$/i);
+    if (m){
+      s += 1;
+      var t = "";
+      for (var i=0;i<texts.length;i++){ if (/manifest\.json$/i.test(texts[i].path)){ t = texts[i].text; break; } }
+      if (/manifest_version|background|content_scripts|action|options_page|browser_specific_settings/i.test(t)) s += 3;
+    }
+    if (anyPath(paths, /(^|\/)(background|service[-_]?worker)\.(js|ts)$/i)) s += 1;
+    if (anyPath(paths, /(^|\/)(content|content[-_]?scripts)\//i)) s += 1;
+    if (anyPath(paths, /(^|\/)(popup|options)\//i)) s += 1;
+    if (anyPath(paths, /(^|\/)icons\//i) && countPath(paths, /\.png$/i) >= 3) s += 1;
+    return s;
+  }
+
+  // —— 数据工程信号打分 ——
+  function dataScore(paths, texts){
+    var s = 0;
+    if (anyPath(paths, /(^|\/)dags\//i)) s += 3;
+    if (anyPath(paths, /(^|\/)(etl|pipelines?|jobs)\//i)) s += 2;
+    if (anyPath(paths, /(^|\/)(spark|flink|kafka|airflow)\//i)) s += 1;
+    var joined = texts.slice(0, 40).map(function(t){ return t.text; }).join("\n").slice(0, 20000);
+    if (/pyspark|pyflink|apache[- ]?(airflow|beam)|kafka|dbt/i.test(joined)) s += 2;
+    if (anyPath(paths, /(^|\/)warehouse\/(ods|dwd|dws|ads|dim)\//i)) s += 2;
+    return s;
+  }
+
+  // —— 命令行工具信号打分 ——
+  function cliScore(paths, texts){
+    var s = 0;
+    for (var i=0;i<texts.length;i++){
+      if (!/package\.json$/i.test(texts[i].path)) continue;
+      if (texts[i].path.split("/").length > 2) continue;
+      try { var pk = JSON.parse(texts[i].text); if (pk.bin) s += 3; } catch(e){}
+      break;
+    }
+    if (anyPath(paths, /(^|\/)__main__\.py$/i)) s += 2;
+    var joined = texts.slice(0, 40).map(function(t){ return t.text; }).join("\n").slice(0, 20000);
+    if (/argparse|click|typer|commander|clap|cobra|getopt/i.test(joined)) s += 2;
+    if (anyPath(paths, /\.(sh|bash|zsh)$/i)) s += 1;
+    return s;
+  }
+
   // —— 判断该用哪套模板 ——
   function detectProfile(paths, texts, type){
     var n = paths.length || 1;
@@ -462,10 +657,22 @@
       if (paths.length <= 6) return "mini";
     }
 
+    // 基础设施即代码：*.tf 最特异，最先认，避免被 server / generic 吞
+    if (iacScore(paths, texts) >= 3) return "iac";
+    // 嵌入式固件：CMake + HAL/BSP 分层 + 链接脚本
+    if (embeddedScore(paths, texts) >= 3) return "embedded";
+    // 浏览器插件：manifest MV3 + background/content/popup 结构
+    if (extensionScore(paths, texts) >= 3) return "extension";
+    // 数据工程：airflow dags + etl/spark 分层
+    if (dataScore(paths, texts) >= 3) return "data";
+
     // 后端服务：必须排在 tool / lib / web 之前——
     // 后端项目文件往往不多，容易被 tool 抢走；而 web 的判定里含 routes/，
     // Express 这类项目会被误判成前端应用。
     if (!hasFrontendSignal(paths) && serverScore(paths, texts) >= 3) return "server";
+
+    // 命令行工具：有 bin / __main__ + 参数解析，但没后端分层（否则归 server）
+    if (cliScore(paths, texts) >= 3) return "cli";
 
     // 内部工具：文件很少，或就一两个 html / 脚本
     var singleHtml = paths.length <= 5 && anyPath(paths, /(^|\/)[^/]+\.html$/);
@@ -902,6 +1109,52 @@
     3:"tools/ scripts/ —— 把规则变成可执行的工具",
     4:"tests/ 或 audit 脚本 + CI —— 自检闭环"
   };
+  var IAC_PHASE_FILE = {
+    0:"modules/ —— 按组件拆成可复用模块，根模块引用它们",
+    1:"main.tf / variables.tf / outputs.tf / providers.tf / versions.tf —— 根模块五件套",
+    2:"envs/ 或 *.tfvars —— 按 dev/test/prod 拆环境，值靠变量注入",
+    3:"backend 块 + 状态锁 —— 远端 state 与锁，避免并发改同一环境",
+    4:"terraform-docs 注释 + README —— 每个模块写清输入输出",
+    5:"vault / .gitignore —— 密钥不进仓库，敏感变量走密钥管理",
+    6:".github/workflows/plan.yml —— PR 时跑 speculative plan 再 apply"
+  };
+  var EMBEDDED_PHASE_FILE = {
+    0:"hal/ bsp/ drivers/ services/ app/ —— 从硬件到应用的分层目录",
+    1:"hal/ drivers/ —— 寄存器操作只在这里，换芯片只改这层",
+    2:"CMakeLists.txt / Makefile + 工具链文件 —— 一条命令可复现构建",
+    3:"bsp/ + *.ld 链接脚本 —— 板级引脚与内存布局受版本控制",
+    4:"tests/ —— 单元测试 + 硬件在环(HIL)，按键/LED 做物理反馈",
+    5:"docs/ HW-SW-interface.md —— 软硬件接口与寄存器说明",
+    6:"烧录/签名脚本 + OTA 方案 —— 固件可发布、可回滚"
+  };
+  var EXTENSION_PHASE_FILE = {
+    0:"manifest.json (MV3) —— 权限最小化，split permissions / host_permissions",
+    1:"background service worker —— 事件驱动，别写持久状态",
+    2:"content scripts —— 隔离世界，靠 chrome.runtime 通信",
+    3:"popup/ options/ —— UI 与业务逻辑分离",
+    4:"chrome.storage + message passing —— 状态与三端通信",
+    5:"vite + vitest + playwright —— 构建、单测、端到端",
+    6:"_locales/ + CHANGELOG + 上架材料 —— 多语言与发布清单"
+  };
+  var DATA_PHASE_FILE = {
+    0:"warehouse/(ods|dwd|dws|ads|dim)/ —— 分层解耦，职责单一",
+    1:"extract/ ingestion/ —— 多源接入，落 stage 区",
+    2:"transform/ processing/ —— 清洗转换，命名按目标表",
+    3:"dags/ (Airflow) —— 调度编排，依赖清晰可重跑",
+    4:"quality/ dq/ —— 数据质量与血缘校验规则",
+    5:"config/ envs/ —— 环境隔离，配置与代码分离",
+    6:"logs/ monitor/ —— 任务可观测，失败能告警",
+    7:"tests/ —— 脚本单测 + 数据契约校验"
+  };
+  var CLI_PHASE_FILE = {
+    0:"bin/ 或 __main__.py —— 单一入口 + 参数解析(argparse/click/clap)",
+    1:"commands/ cmd/ —— 子命令逻辑分层，别堆一个文件",
+    2:"README + --help —— 写清用法与示例",
+    3:"config/ .env —— 参数默认值与外部配置分离",
+    4:"stdout/stderr + 退出码 —— 可管道组合、能被脚本调用",
+    5:"tests/ —— 覆盖核心子命令",
+    6:"setup.py / pyproject / package bin / brew 公式 —— 一行装好"
+  };
 
   function phaseGap(d, adv, maxId, fileMap, why){
     d.phases.list.forEach(function(p){
@@ -1127,6 +1380,129 @@
     if (!d.eng.ci && d.files > 12) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
       detail:".github/workflows/ci.yml：install → lint → test → build",
       why:"没有 CI，坏代码能一路合进主分支。" });
+    return sortAdv(adv);
+  }
+
+  function adviceIac(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 5, IAC_PHASE_FILE, "基础设施这环缺了，改一次环境全靠手动敲命令，出了事没法回滚。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：这套基础设施管什么、怎么初始化、怎么跑 plan/apply",
+      why:"IaC 也是代码，没文档新人不敢动，一改就炸。" });
+    if (!hasA.MODULES) adv.push({ pri:"P1", tag:"复用", title:"拆可复用模块",
+      detail:"modules/ 按组件(VPC/数据库/队列)拆模块，根模块只引用",
+      why:"所有资源堆一个目录，改一处影响全局，没法复用。" });
+    if (!hasA.ENV) adv.push({ pri:"P1", tag:"环境", title:"补环境隔离",
+      detail:"envs/ 或 *.tfvars：dev/test/prod 分环境，值靠变量注入",
+      why:"环境配置混在代码里，切环境只能全局改。" });
+    if (!hasA.STATE) adv.push({ pri:"P2", tag:"安全", title:"补远端状态锁",
+      detail:"backend 块 + 状态锁(dynamodb)，避免并发改同一环境",
+      why:"本地 state 多人协作必然冲突，还可能误删资源。" });
+    if (!hasA.SECRET) adv.push({ pri:"P2", tag:"安全", title:"密钥别进仓库",
+      detail:"vault 或密钥管理，.gitignore 屏蔽 *.tfstate / 密钥文件",
+      why:"state 文件里常含明文密钥，提交上去就泄露。" });
+    if (!hasA.DOCS) adv.push({ pri:"P3", tag:"文档", title:"补模块文档",
+      detail:"terraform-docs 注释，列清每个模块的 inputs/outputs",
+      why:"模块不写输入输出，别人不敢引用。" });
+    return sortAdv(adv);
+  }
+
+  function adviceEmbedded(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 5, EMBEDDED_PHASE_FILE, "嵌入式这环缺了，应用层直接碰寄存器，换芯片全员重写。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：支持的硬件、怎么构建、怎么烧录",
+      why:"固件项目没说清芯片和工具链，接手的人第一步就卡。" });
+    if (!hasA.LAYER) adv.push({ pri:"P1", tag:"分层", title:"补分层目录",
+      detail:"hal/ bsp/ drivers/ services/ app/ —— 寄存器操作只放 hal",
+      why:"不分层，换颗 MCU 业务逻辑全得重写。" });
+    if (!hasA.BUILD) adv.push({ pri:"P1", tag:"构建", title:"补可复现构建",
+      detail:"CMakeLists.txt / Makefile + 锁定的工具链文件",
+      why:"构建靠手动敲命令，换机器就编不过。" });
+    if (!hasA.LINK) adv.push({ pri:"P2", tag:"板级", title:"补链接脚本",
+      detail:"*.ld / *.sct 受版本控制，内存布局别靠 IDE 默认",
+      why:"链接脚本不进版本库，不同环境内存分布会漂移。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"质量", title:"补测试",
+      detail:"tests/ 单元测试 + 硬件在环(HIL)，用 LED 做物理反馈",
+      why:"固件没测试，烧进去才发现问题，调试成本极高。" });
+    if (!hasA.OTA) adv.push({ pri:"P3", tag:"交付", title:"补固件交付",
+      detail:"烧录/签名脚本 + OTA 方案，能回滚",
+      why:"没交付流程，升级只能手动烧，出砖没法救。" });
+    return sortAdv(adv);
+  }
+
+  function adviceExtension(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 5, EXTENSION_PHASE_FILE, "插件这环缺了，三端(弹窗/后台/内容)各写各的，通信全靠猜。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：插件干什么、权限申请了什么、本地怎么加载调试",
+      why:"插件涉及权限和商店政策，没说明接手的人不敢改。" });
+    if (!hasA.MANIFEST) adv.push({ pri:"P0", tag:"清单", title:"补 MV3 清单",
+      detail:"manifest.json：manifest_version 3 + 最小权限集合",
+      why:"V2 已废弃，权限写得宽会被商店打回。" });
+    if (!hasA.BG) adv.push({ pri:"P1", tag:"后台", title:"补后台逻辑",
+      detail:"background service worker：事件驱动，别写持久状态",
+      why:"后台逻辑散在内容脚本里，生命周期一乱就丢数据。" });
+    if (!hasA.CONTENT) adv.push({ pri:"P1", tag:"内容", title:"补内容脚本",
+      detail:"content scripts：页面注入逻辑，靠 chrome.runtime 通信",
+      why:"页面操作写在 popup 里跑不起来，必须在 content 里。" });
+    if (!hasA.POPUP) adv.push({ pri:"P2", tag:"UI", title:"补弹窗/选项页",
+      detail:"popup/ options/ 与逻辑分离",
+      why:"UI 和业务混一起，改样式容易动坏逻辑。" });
+    if (!hasA.ICONS) adv.push({ pri:"P2", tag:"资源", title:"补图标",
+      detail:"icons/ 提供 16/48/128 三档 PNG",
+      why:"缺图标商店不让上架，工具栏还显示裂图。" });
+    if (!hasA.STORE) adv.push({ pri:"P3", tag:"发布", title:"补上架材料",
+      detail:"_locales/ 多语言 + CHANGELOG + 隐私政策",
+      why:"没这些过不了审核，也没法迭代记录。" });
+    return sortAdv(adv);
+  }
+
+  function adviceData(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 6, DATA_PHASE_FILE, "数据这环缺了，脚本散落各目录，血缘和依赖全靠人脑记。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：数据从哪来、到哪去、怎么重跑",
+      why:"ETL 脚本一多，没人说得清某张表怎么来的。" });
+    if (!hasA.LAYER) adv.push({ pri:"P1", tag:"分层", title:"补数仓分层",
+      detail:"warehouse/(ods|dwd|dws|ads|dim)/ 分层解耦",
+      why:"不分层，源表和业务表混在一起，改一处崩一片。" });
+    if (!hasA.ORCH) adv.push({ pri:"P1", tag:"编排", title:"补调度编排",
+      detail:"dags/ (Airflow)：任务依赖图，能失败重跑",
+      why:"靠 cron 裸跑脚本，依赖顺序错了静默出脏数据。" });
+    if (!hasA.QUALITY) adv.push({ pri:"P2", tag:"质量", title:"补数据质量",
+      detail:"quality/ dq/：空值、类型、血缘校验规则",
+      why:"没有质量闸门，脏数据一路流到报表。" });
+    if (!hasA.CONFIG) adv.push({ pri:"P2", tag:"环境", title:"补环境隔离",
+      detail:"config/ envs/：连接串与参数走配置，不硬编码",
+      why:"库地址写死在脚本里，换环境只能全局搜。" });
+    if (!hasA.OBS) adv.push({ pri:"P3", tag:"可观测", title:"补日志监控",
+      detail:"logs/ monitor/：任务成败与耗时可观测、能告警",
+      why:"半夜任务挂了没人知道，第二天才发现报表是空的。" });
+    return sortAdv(adv);
+  }
+
+  function adviceCli(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 5, CLI_PHASE_FILE, "CLI 这环缺了，参数和输出没约定，别人没法在脚本里调它。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：装法 + 命令清单 + 常用示例",
+      why:"命令行工具没文档，用户只能读源码。" });
+    if (!hasA.ENTRY) adv.push({ pri:"P0", tag:"入口", title:"补入口与参数",
+      detail:"bin/ 或 __main__.py + 参数解析(argparse/click/clap)",
+      why:"没有统一入口和参数定义，子命令只能靠 position 猜。" });
+    if (!hasA.HELP) adv.push({ pri:"P1", tag:"文档", title:"补 --help",
+      detail:"每个子命令有 --help，说明参数与默认值",
+      why:"没 help，用的人只能试错。" });
+    if (!hasA.PIPE) adv.push({ pri:"P2", tag:"组合", title:"补管道友好",
+      detail:"stdout/stderr 分离 + 有意义的退出码，能被管道串接",
+      why:"退出码永远是 0，上层脚本无法判断是否成功。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"tests/ 覆盖核心子命令的输入输出",
+      why:"CLI 改了行为，调用方无感知就坏了。" });
+    if (!hasA.INSTALL) adv.push({ pri:"P3", tag:"分发", title:"补安装分发",
+      detail:"setup.py / pyproject / package bin / brew 公式",
+      why:"没有安装方式，别人得手动拷文件、改 PATH。" });
     return sortAdv(adv);
   }
 
@@ -1677,6 +2053,8 @@
     detectProjects: detectProjects, scoreDir: scoreDir,
     genPrompt: genPrompt, MANIFEST: MANIFEST, PROJECT_MIN: PROJECT_MIN,
     PROFILE_ORDER: PROFILE_ORDER, serverScore: serverScore, hasFrontendSignal: hasFrontendSignal,
+    iacScore: iacScore, embeddedScore: embeddedScore, extensionScore: extensionScore,
+    dataScore: dataScore, cliScore: cliScore,
     analyzeEntries: analyzeEntries, readTexts: readTexts,
     // 下划线前缀 = 给测试用的内部接口
     _setSel: function(label, arr){ SEL[label] = arr; },
