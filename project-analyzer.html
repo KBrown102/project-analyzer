@@ -162,14 +162,22 @@
 <script>
 (function(){
   "use strict";
-  var NOISE = /(^|\/)(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release)(\/|$)/;
+  // 噪音目录：浏览器版和 Electron 版（build-electron/scanner.js）各有一份，
+  // 两处必须完全一致，否则同一个目录两条路线会算出不同结果。
+  // tests/smoke.test.mjs 会核对这个列表，改这里记得同步改那边。
+  var NOISE = /(^|\/)(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release|\.cache|coverage|\.gradle|\.terraform|vendor)(\/|$)/;
   var TEXT_RE = /\.(md|markdown|json|ya?ml|txt|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i;
   var MAX_TEXTS = 250, MAX_SIZE = 300 * 1024;
+  // 浏览器版：浏览器会先把目录下所有文件枚举完才交给我们，数量太大时先提醒用户
+  var WARN_FILES = 8000;    // 超过这个数给提示
+  var HARD_FILES = 40000;   // 超过这个数强烈建议换 exe 版
 
   var A = null, B = null, mode = "single";
   var CACHE = {};
   // 当前分析到哪一层：null = 整个目录，否则是子项目路径
   var SCOPE = { A:null, B:null };
+  // 浏览器交给我们的原始文件数（过滤噪音之前），用于提示规模
+  var RAW_COUNT = { A:0, B:0 };
 
   var RE_TEST = /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\.|test-strategy/i;
   var RE_CI   = /\.github\/workflows|gitlab-ci|\.gitlab-ci|azure-pipelines|Jenkinsfile/i;
@@ -571,21 +579,57 @@
     }, Promise.resolve()).then(function(){ return out; });
   }
 
+  // 核心入口：手里已经有 {paths, texts} 就直接算。
+  // 浏览器（webkitdirectory）和 Electron（fs 扫描）两条路都汇到这里，
+  // 后面的分析逻辑完全一样，只有数据来源不同。
+  // paths 里第一段必须是根目录名，例如 "antgame/src/main.js"
+  function analyzeEntries(entries, label, profileId){
+    var paths = entries && entries.paths || [];
+    if (!paths.length) return Promise.resolve(null);
+    CACHE[label] = {
+      paths: paths,
+      texts: (entries && entries.texts) || [],
+      root: paths[0].split("/")[0],
+      fileCount: paths.length,
+      boundary: detectProjects(paths),
+      source: (entries && entries.source) || "unknown",
+      truncated: !!(entries && entries.truncated)
+    };
+    return Promise.resolve(buildData(label, profileId));
+  }
+
+  // 浏览器入口：先按 NOISE 过滤，再读文本内容
   function analyze(fileList, label, profileId){
     var files = Array.prototype.slice.call(fileList)
       .filter(function(f){ return !NOISE.test(f.webkitRelativePath.replace(/\\/g,"/")); });
     if (!files.length) return Promise.resolve(null);
-    var root = files[0].webkitRelativePath.split(/[\\/]/)[0];
     return readTexts(files).then(function(texts){
-      var allPaths = files.map(function(f){ return f.webkitRelativePath.replace(/\\/g,"/"); });
-      CACHE[label] = {
-        paths: allPaths,
+      return analyzeEntries({
+        paths: files.map(function(f){ return f.webkitRelativePath.replace(/\\/g,"/"); }),
         texts: texts,
-        root: root,
-        fileCount: files.length,
-        boundary: detectProjects(allPaths)
-      };
-      return buildData(label, profileId);
+        source: "browser"
+      }, label, profileId);
+    });
+  }
+
+  // Electron 入口：原生对话框选路径，主进程扫完把结果送进来。
+  // 没有 Electron 环境时 HAS_NATIVE 为 false，UI 会自动退回 input 方式。
+  var NATIVE = (typeof window !== "undefined" && window.electronAPI) || null;
+  var HAS_NATIVE = !!(NATIVE && NATIVE.openFolder && NATIVE.scan);
+
+  function analyzeNative(label, profileId){
+    if (!HAS_NATIVE) return Promise.resolve(null);
+    return NATIVE.openFolder().then(function(root){
+      if (!root) return null;
+      return NATIVE.scan(root).then(function(entries){
+        if (!entries || !entries.paths || !entries.paths.length) return null;
+        return analyzeEntries({
+          paths: entries.paths,
+          texts: entries.texts || [],
+          source: "electron",
+          truncated: entries.truncated
+        }, label, profileId);
+      });
     });
   }
 
@@ -621,6 +665,8 @@
       profileTag: prof.tag,
       auto: auto,
       type: type,
+      source: c.source || "browser",
+      truncated: !!c.truncated,
       boundary: c.boundary || null,
       phases: detectPhases(paths, prof, texts),
       artifacts: detectArtifacts(paths, prof, texts),
@@ -1241,6 +1287,23 @@
     return h;
   }
 
+  // 浏览器版专属提示：告诉用户卡是因为浏览器要枚举全部文件，不是工具坏了
+  function renderScale(d){
+    var raw = RAW_COUNT[d.label] || 0;
+    // Electron 版是按需扫描，噪音目录根本不进，不存在这个问题
+    if (d.source === "electron" || raw < WARN_FILES) return "";
+    var skipped = raw - d.files;
+    var h = '<div class="bnd">';
+    h += '<div class="bndt">' + (raw >= HARD_FILES ? "文件太多，浏览器扛得吃力" : "文件偏多") + '</div>';
+    h += '<div class="bndd">浏览器一共枚举了 <b>' + raw + '</b> 个文件，其中 <b>' + skipped +
+         '</b> 个落在噪音目录（node_modules / .git / dist 等）里已被跳过，实际参与分析 ' +
+         d.files + ' 个。<br>' +
+         '浏览器会先把目录下<b>所有</b>文件都枚举一遍才轮到分析器过滤，大目录卡的就是这一步。' +
+         'exe 版走的是逐层扫描，这些目录压根不进去，会快很多。</div>';
+    h += '</div>';
+    return h;
+  }
+
   function render(){
     var out = document.getElementById("out");
     if (!A && !B){ out.innerHTML = '<div class="empty">还没有选择项目目录。</div>'; return; }
@@ -1252,7 +1315,7 @@
     } else {
       var items = [A, B].filter(Boolean);
       var h = "";
-      items.forEach(function(d){ h += renderBoundary(d); });
+      items.forEach(function(d){ h += renderScale(d) + renderBoundary(d); });
       h += '<div class="grid' + (items.length > 1 ? " two" : "") + '">' +
         items.map(renderCard).join("") + '</div>';
       out.innerHTML = h;
@@ -1349,19 +1412,41 @@
     return txt;
   }
 
+  function onLoaded(which, data, slot){
+    if (!data){ slot.textContent = "这个目录没有可分析的文件"; slot.className = "slot"; return; }
+    if (which === "A") A = data; else B = data;
+    updateSlots();
+    if (which === "B" && A) setMode("compare");
+    else render();
+  }
+
+  // 浏览器路线（<input webkitdirectory>）
   function load(which, input){
     if (!input.files || !input.files.length) return;
     var slot = document.getElementById(which === "A" ? "slotA" : "slotB");
     slot.className = "slot";
-    slot.textContent = "分析中…";
+    slot.textContent = "正在读取，文件多的话请稍候…";
+    RAW_COUNT[which] = input.files.length;
     var forced = document.getElementById("selProfile").value || null;
     analyze(input.files, which, forced).then(function(data){
-      if (!data){ slot.textContent = "该项目没有可分析的文件"; return; }
-      if (which === "A") A = data; else B = data;
-      updateSlots();
-      if (which === "B" && A) setMode("compare");
-      else render();
+      onLoaded(which, data, slot);
     });
+  }
+
+  // Electron 路线（原生目录对话框 + 主进程扫描）
+  function loadNative(which){
+    var slot = document.getElementById(which === "A" ? "slotA" : "slotB");
+    slot.className = "slot";
+    slot.textContent = "正在扫描目录…";
+    var forced = document.getElementById("selProfile").value || null;
+    analyzeNative(which, forced).then(function(data){
+      onLoaded(which, data, slot);
+    });
+  }
+
+  function pickDir(which){
+    if (HAS_NATIVE) loadNative(which);
+    else document.getElementById(which === "A" ? "fa" : "fb").click();
   }
 
   function setMode(m){
@@ -1371,8 +1456,8 @@
     render();
   }
 
-  document.getElementById("btnA").onclick = function(){ document.getElementById("fa").click(); };
-  document.getElementById("btnB").onclick = function(){ document.getElementById("fb").click(); };
+  document.getElementById("btnA").onclick = function(){ pickDir("A"); };
+  document.getElementById("btnB").onclick = function(){ pickDir("B"); };
   document.getElementById("fa").onchange = function(){ load("A", this); };
   document.getElementById("fb").onchange = function(){ load("B", this); };
   document.getElementById("mSingle").onclick = function(){ setMode("single"); };
@@ -1387,6 +1472,7 @@
     document.getElementById("slotB").className = "slot";
     document.getElementById("slotB").textContent = "项目 B：未选择（对比模式需要）";
     SCOPE.A = null; SCOPE.B = null;
+    RAW_COUNT.A = 0; RAW_COUNT.B = 0;
     SEL = {};
     setMode("single");
   };
@@ -1460,6 +1546,7 @@
     detectType: detectType, detectProfile: detectProfile,
     detectProjects: detectProjects, scoreDir: scoreDir,
     genPrompt: genPrompt, MANIFEST: MANIFEST, PROJECT_MIN: PROJECT_MIN,
+    analyzeEntries: analyzeEntries, readTexts: readTexts,
     // 下划线前缀 = 给测试用的内部接口
     _setSel: function(label, arr){ SEL[label] = arr; },
     detectPhases: detectPhases, detectArtifacts: detectArtifacts,

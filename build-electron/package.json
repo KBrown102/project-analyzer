@@ -16,6 +16,8 @@
     "copyright": "Copyright © 2026",
     "files": [
       "main.js",
+      "preload.js",
+      "scanner.js",
       "project-analyzer.html",
       "icon.ico"
     ],

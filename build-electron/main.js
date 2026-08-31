@@ -1,9 +1,12 @@
 // Electron 主进程：把 project-analyzer.html 装进一个独立桌面窗口
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron");
 const path = require("path");
+const { scanDir } = require("./scanner");
+
+let mainWindow = null;
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 900,
     minWidth: 760,
@@ -13,22 +16,37 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
-    }
+    },
   });
 
-  win.loadFile(path.join(__dirname, "project-analyzer.html"));
+  mainWindow.loadFile(path.join(__dirname, "project-analyzer.html"));
 
   // 页面里的外链一律用系统默认浏览器打开（虽然此工具不联网，防患于未然）
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
 
-  win.once("ready-to-show", () => win.show());
+  mainWindow.once("ready-to-show", () => mainWindow.show());
 }
+
+// 弹系统目录选择框，返回选中的路径；用户取消则返回 null
+ipcMain.handle("dialog:openFolder", async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ["openDirectory"],
+  });
+  if (r.canceled || !r.filePaths || !r.filePaths.length) return null;
+  return r.filePaths[0];
+});
+
+// 扫描目录，只回传路径与少量文本内容，不传文件内容以外的任何东西
+ipcMain.handle("fs:scan", async (_e, root) => {
+  if (!root) return null;
+  return scanDir(root);
+});
 
 app.whenReady().then(createWindow);
 

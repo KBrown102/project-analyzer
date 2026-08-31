@@ -65,6 +65,47 @@ assert("no legacy ARTIFACTS array", !/\bARTIFACTS\b/.test(html));
   assert(`${rel} not UTF-8-BOM`, !isUtf8Bom);
 });
 
+// ---------- Electron 侧的原生扫描 ----------
+["build-electron/preload.js", "build-electron/scanner.js", "build-electron/main.js"].forEach((rel) =>
+  assert(`${rel} exists`, fs.existsSync(path.join(root, rel)))
+);
+
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "build-electron", "package.json"), "utf-8"));
+["main.js", "preload.js", "scanner.js", "project-analyzer.html", "icon.ico"].forEach((f) =>
+  assert(`package.json files 包含 ${f}`, pkg.build.files.includes(f))
+);
+const mainJs = fs.readFileSync(path.join(root, "build-electron", "main.js"), "utf-8");
+assert("main.js 配了 preload", mainJs.includes("preload"));
+assert("main.js 注册了 dialog:openFolder", mainJs.includes("dialog:openFolder"));
+assert("main.js 注册了 fs:scan", mainJs.includes("fs:scan"));
+const preload = fs.readFileSync(path.join(root, "build-electron", "preload.js"), "utf-8");
+assert("preload 暴露 openFolder", preload.includes("openFolder"));
+assert("preload 暴露 scan", preload.includes("scan:"));
+assert("scanner.js 不依赖 electron（否则没法单测）",
+  !/require\(["']electron["']\)/.test(fs.readFileSync(path.join(root, "build-electron", "scanner.js"), "utf-8")));
+
+// 浏览器版与 Electron 版的噪音目录列表必须一致，否则同一目录两条路线结果会不同
+function noiseWords(text, re) {
+  const m = text.match(re);
+  if (!m) return null;
+  return m[1].split("|").map((s) => s.trim()).filter(Boolean).sort();
+}
+// 注意：不能用 [^)]+ —— 列表里有 dist(-.*)? 这种自带括号的项，会提前截断
+const htmlNoise = noiseWords(html, /var NOISE = \/\(\^\|\\\/\)\((.+?)\)\(\\\/\|\$\)\//);
+const scannerNoise = noiseWords(
+  fs.readFileSync(path.join(root, "build-electron", "scanner.js"), "utf-8"),
+  /const NOISE_DIR = \/\^\((.+?)\)\$\//
+);
+assert("取到了 html 的噪音列表", Array.isArray(htmlNoise));
+assert("取到了 scanner 的噪音列表", Array.isArray(scannerNoise));
+if (htmlNoise && scannerNoise) {
+  const onlyHtml = htmlNoise.filter((w) => !scannerNoise.includes(w));
+  const onlyScan = scannerNoise.filter((w) => !htmlNoise.includes(w));
+  assert(`两边噪音词一致（各 ${htmlNoise.length} 个）`,
+    onlyHtml.length === 0 && onlyScan.length === 0,
+    `html 多: ${onlyHtml.join(",")} | scanner 多: ${onlyScan.join(",")}`);
+}
+
 // ---------- 文档 ----------
 assert("README.md exists", fs.existsSync(path.join(root, "README.md")));
 
