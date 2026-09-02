@@ -477,10 +477,140 @@
         { key:"INSTALL",  label:"安装分发",      re:/setup\.py|pyproject|package\.json.*bin|brew\.rb/i }
       ],
       advice: adviceCli
+    },
+
+    mobile: {
+      id:"mobile", name:"移动原生应用", tag:"平台工程到上架",
+      phases:[
+        { id:0, name:"脚手架/平台工程", re:/(AndroidManifest\.xml|\.xcodeproj|\.xcworkspace|pubspec\.yaml)$/i },
+        { id:1, name:"UI 层",          re:/(^|\/)(ui|screens?|views?|composables?|widgets?)\//i },
+        { id:2, name:"数据层",         re:/(^|\/)(data|models?|repositories?|network|api)\//i },
+        { id:3, name:"导航/路由",      re:/(^|\/)(navigation|router|routes?)\//i },
+        { id:4, name:"原生能力/权限",  re:/(^|\/)(permissions?|native|platform|modules?)\//i },
+        { id:5, name:"资源/国际化",    re:/(^|\/)(res|Assets\.xcassets|resources|l10n|i18n)\//i },
+        { id:6, name:"构建/签名/发布", re:/(^|\/)(fastlane|gradle|config)\/|build\.gradle|Info\.plist|\.keystore|\.mobileprovision/i },
+        { id:7, name:"测试",           re:RE_TEST }
+      ],
+      artifacts:[
+        { key:"README",  label:"README",        re:RE_DOC },
+        { key:"MANIFEST",label:"平台清单",       re:/(AndroidManifest\.xml|\.xcodeproj|\.xcworkspace|pubspec\.yaml)$/i },
+        { key:"UI",      label:"UI 层",         re:/(^|\/)(ui|screens?|views?|composables?)\//i },
+        { key:"DATA",    label:"数据层",         re:/(^|\/)(data|models?|repositories?|network)\//i },
+        { key:"NAV",     label:"导航",           re:/(^|\/)(navigation|router|routes?)\//i },
+        { key:"NATIVE",  label:"原生能力",       re:/(^|\/)(permissions?|native|platform)\//i },
+        { key:"RES",     label:"资源/国际化",    re:/(^|\/)(res|Assets\.xcassets|l10n)\//i },
+        { key:"TEST",    label:"测试",           re:RE_TEST },
+        { key:"CI",      label:"CI 配置",        re:RE_CI }
+      ],
+      advice: adviceMobile
+    },
+
+    desktop: {
+      id:"desktop", name:"桌面应用", tag:"窗口到安装包",
+      phases:[
+        { id:0, name:"应用入口/窗口", re:/(main\.(js|ts)|App\.xaml|main\.dart|src-tauri\/|tauri\.conf\.json|Program\.cs)/i },
+        { id:1, name:"UI 层",         re:/(^|\/)(components?|views?|pages?|renderer|windows?|widgets?)\//i },
+        { id:2, name:"原生能力",      re:/(^|\/)(native|platform|system|tray|menu|ipc)\//i },
+        { id:3, name:"状态/本地数据", re:/(^|\/)(store|state|db|database|storage)\//i },
+        { id:4, name:"打包构建",      re:/(electron-builder|tauri|wix|InnoSetup|\.csproj|build\/)/i },
+        { id:5, name:"自动更新",      re:/(^|\/)(updater|auto[-_]?update|sparkle)\//i },
+        { id:6, name:"安装分发",      re:/\.(dmg|exe|msi|AppImage|deb|rpm)$/i },
+        { id:7, name:"测试",          re:RE_TEST }
+      ],
+      artifacts:[
+        { key:"README",  label:"README",      re:RE_DOC },
+        { key:"ENTRY",   label:"入口",         re:/(main\.(js|ts)|App\.xaml|main\.dart|src-tauri\/|tauri\.conf\.json)/i },
+        { key:"UI",      label:"UI 层",        re:/(^|\/)(components?|views?|renderer|windows?)\//i },
+        { key:"NATIVE",  label:"原生能力",     re:/(^|\/)(native|ipc|tray|menu|system)\//i },
+        { key:"STORE",   label:"状态/存储",    re:/(^|\/)(store|state|db|storage)\//i },
+        { key:"BUILD",   label:"打包构建",     re:/(electron-builder|tauri|wix|InnoSetup|\.csproj)/i },
+        { key:"INSTALL", label:"安装包",       re:/\.(dmg|exe|msi|AppImage|deb|rpm)$/i },
+        { key:"TEST",    label:"测试",         re:RE_TEST },
+        { key:"CI",      label:"CI 配置",      re:RE_CI }
+      ],
+      advice: adviceDesktop
+    },
+
+    aiml: {
+      id:"aiml", name:"AI / 机器学习", tag:"数据到推理",
+      phases:[
+        { id:0, name:"数据/数据集",   re:/(^|\/)(data|datasets?|raw|processed)\//i },
+        { id:1, name:"训练/微调",     re:/(^|\/)(train|training|finetune|finetuning|scripts?)\//i },
+        { id:2, name:"模型定义",      re:/(^|\/)(models?|nets?|architectures?)\//i },
+        { id:3, name:"推理/服务",     re:/(^|\/)(inference|serve|serving|api|deploy)\//i },
+        { id:4, name:"评估",          re:/(^|\/)(eval|evaluation|metrics|benchmarks?)\//i },
+        { id:5, name:"配置/实验",     re:/(^|\/)(configs?|conf|experiments?|hydra)\//i },
+        { id:6, name:"笔记本",        re:/\.ipynb$/i },
+        { id:7, name:"测试",          re:RE_TEST }
+      ],
+      artifacts:[
+        { key:"README",   label:"README",     re:RE_DOC },
+        { key:"DATA",     label:"数据集",     re:/(^|\/)(data|datasets?)\//i },
+        { key:"TRAIN",    label:"训练脚本",   re:/(^|\/)(train|training|finetune)\//i },
+        { key:"MODEL",    label:"模型定义",   re:/(^|\/)(models?)\//i },
+        { key:"NOTEBOOK", label:"笔记本",     re:/\.ipynb$/i },
+        { key:"CONFIG",   label:"配置/实验", re:/(^|\/)(configs?|experiments?)\//i },
+        { key:"WEIGHTS",  label:"权重文件",   re:/\.(onnx|pt|pth|h5|hdf5|ckpt|safetensors|gguf)$/i },
+        { key:"TEST",     label:"测试",       re:RE_TEST },
+        { key:"CI",       label:"CI 配置",    re:RE_CI }
+      ],
+      advice: adviceAiml
+    },
+
+    devops: {
+      id:"devops", name:"DevOps / CI", tag:"CI 到部署",
+      phases:[
+        { id:0, name:"CI 配置",     re:/(^|\/)\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|(^|\/)\.circleci/i },
+        { id:1, name:"容器化",      re:/(Dockerfile|Containerfile|docker-compose\.yml|\.dockerignore)$/i },
+        { id:2, name:"编排/部署",    re:/(^|\/)(k8s|kubernetes|manifests?|deploy|deployments|helm|charts|argocd)\//i },
+        { id:3, name:"配置管理",     re:/(^|\/)(ansible|playbooks?|roles|group_vars|inventory)\//i },
+        { id:4, name:"环境/密钥",    re:/(^|\/)(env|environments?|secrets?)\//i },
+        { id:5, name:"监控/日志",    re:/(^|\/)(logs?|monitor|observ|metrics|grafana|prometheus)\//i },
+        { id:6, name:"脚本/自动化",  re:/(^|\/)(scripts?|bin)\//i },
+        { id:7, name:"文档",         re:RE_DOC }
+      ],
+      artifacts:[
+        { key:"README",    label:"README",       re:RE_DOC },
+        { key:"CI",        label:"CI 配置",      re:/(^|\/)\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|(^|\/)\.circleci/i },
+        { key:"CONTAINER", label:"容器化",       re:/(Dockerfile|Containerfile|docker-compose\.yml)$/i },
+        { key:"ORCH",      label:"编排/部署",    re:/(^|\/)(k8s|kubernetes|manifests?|deploy|helm|charts)\//i },
+        { key:"CONFIGMGMT",label:"配置管理",     re:/(^|\/)(ansible|playbooks?|roles)\//i },
+        { key:"ENV",       label:"环境/密钥",    re:/(^|\/)(env|environments?|secrets?)\//i },
+        { key:"OBS",       label:"监控/日志",    re:/(^|\/)(logs?|monitor|observ|metrics)\//i },
+        { key:"SCRIPTS",   label:"自动化脚本",   re:/(^|\/)(scripts?|bin)\//i },
+        { key:"TEST",      label:"测试",         re:RE_TEST }
+      ],
+      advice: adviceDevops
+    },
+
+    microservice: {
+      id:"microservice", name:"微服务架构", tag:"拆分到编排",
+      phases:[
+        { id:0, name:"服务拆分",      re:/(^|\/)(services|apps|packages|cmd|deployments)\//i },
+        { id:1, name:"网关/路由",     re:/(^|\/)(api-gateway|gateway|gateway-api|edge|router)\//i },
+        { id:2, name:"通信/契约",     re:/(^|\/)(proto|protos|grpc|pb|contracts?)\/|\.proto$/i },
+        { id:3, name:"共享/公共",     re:/(^|\/)(common|shared|libs|internal\/pkg|pkg)\//i },
+        { id:4, name:"数据层(每服务)",re:/(^|\/)(repositories?|entities|migrations?)\//i },
+        { id:5, name:"配置/注册",     re:/(^|\/)(config|discovery|registry|consul|etcd)\//i },
+        { id:6, name:"部署/编排",     re:/(docker-compose\.yml|(^|\/)(k8s|deploy|helm)\/)/i },
+        { id:7, name:"测试",          re:RE_TEST }
+      ],
+      artifacts:[
+        { key:"README",   label:"README",      re:RE_DOC },
+        { key:"SERVICES", label:"服务模块",    re:/(^|\/)(services|apps|packages|cmd)\/[^/]+\//i },
+        { key:"GATEWAY",  label:"网关",        re:/(^|\/)(api-gateway|gateway|gateway-api)\//i },
+        { key:"CONTRACT", label:"通信契约",    re:/(^|\/)(proto|protos|grpc)\/|\.proto$/i },
+        { key:"SHARED",   label:"共享模块",    re:/(^|\/)(common|shared|libs|internal\/pkg)\//i },
+        { key:"CONFIG",   label:"配置/注册",   re:/(^|\/)(config|discovery|registry)\//i },
+        { key:"DEPLOY",   label:"部署编排",    re:/(docker-compose\.yml|(^|\/)(k8s|deploy|helm)\/)/i },
+        { key:"TEST",     label:"测试",        re:RE_TEST },
+        { key:"CI",       label:"CI 配置",     re:RE_CI }
+      ],
+      advice: adviceMicroservice
     }
   };
 
-  var PROFILE_ORDER = ["game","web","server","iac","embedded","extension","data","cli","lib","mini","tool","meta","generic"];
+  var PROFILE_ORDER = ["game","web","iac","embedded","extension","mobile","desktop","data","aiml","microservice","server","cli","lib","mini","tool","meta","devops","generic"];
 
   function getProfile(id){ return PROFILES[id] || PROFILES.generic; }
 
@@ -494,6 +624,10 @@
     if (embeddedScore(paths, texts) >= 3) return "嵌入式固件";
     if (extensionScore(paths, texts) >= 3) return "浏览器插件";
     if (dataScore(paths, texts) >= 3) return "数据工程项目";
+    if (mobileScore(paths, texts) >= 3) return "移动原生应用";
+    if (desktopScore(paths, texts) >= 3) return "桌面应用";
+    if (aimlScore(paths, texts) >= 3) return "AI / 机器学习项目";
+    if (microserviceScore(paths, texts) >= 3) return "微服务架构";
     if (anyPath(paths, /conf\.lua$/) && anyPath(paths, /main\.lua$/)) return "LÖVE 2D 游戏";
     if (anyPath(paths, /ProjectSettings\//) || anyPath(paths, /\.unity$/)) return "Unity 项目";
     if (anyPath(paths, /\.uproject$/)) return "Unreal 项目";
@@ -526,6 +660,7 @@
     if (anyPath(paths, /\.csproj$|\.sln$/)) return ".NET 项目";
     if (anyPath(paths, /composer\.json$|\.php$/)) return "PHP 项目";
     if (anyPath(paths, /Gemfile$|\.rb$/)) return "Ruby 项目";
+    if (devopsScore(paths, texts) >= 3) return "DevOps / CI 工程";
     return "未识别类型";
   }
 
@@ -633,6 +768,82 @@
     return s;
   }
 
+  // —— 移动原生信号打分 ——
+  function mobileScore(paths, texts){
+    var s = 0;
+    if (anyPath(paths, /AndroidManifest\.xml$/i)) s += 3;
+    if (anyPath(paths, /\.(xcodeproj|xcworkspace)$/i)) s += 3;
+    if (anyPath(paths, /(^|\/)ios\//i) && anyPath(paths, /\.(swift|h|m)$/i)) s += 2;
+    if (anyPath(paths, /(^|\/)android\//i)) s += 2;
+    if (anyPath(paths, /(^|\/)res\/(layout|values|drawable|mipmap)\//i)) s += 1;
+    if (anyPath(paths, /(^|\/)Assets\.xcassets\//i)) s += 1;
+    if (anyPath(paths, /pubspec\.yaml$/i) && anyPath(paths, /(^|\/)lib\/main\.dart$/i)) s += 2;
+    return s;
+  }
+
+  // —— 桌面应用信号打分 ——
+  function desktopScore(paths, texts){
+    var s = 0;
+    if (anyPath(paths, /tauri\.conf\.json$/i)) s += 3;
+    if (anyPath(paths, /(^|\/)src-tauri\//i)) s += 2;
+    if (anyPath(paths, /\.csproj$/i) && anyPath(paths, /\.xaml$/i)) s += 3;
+    if (anyPath(paths, /\.(pro|pri)$/i) && anyPath(paths, /\.ui$/i)) s += 2;
+    if (anyPath(paths, /electron-builder\.json(5)?$/i)) s += 1;
+    var joined = texts.slice(0, 30).map(function(t){ return t.text; }).join("\n").slice(0, 15000);
+    if (/"electron"|"@electron\/|electron-builder|electron\.js/i.test(joined)) s += 3;
+    if (/@tauri-apps|tauri::|use tauri/i.test(joined)) s += 2;
+    return s;
+  }
+
+  // —— AI / 机器学习信号打分 ——
+  function aimlScore(paths, texts){
+    var s = 0;
+    if (anyPath(paths, /\.ipynb$/i)) s += 2;
+    if (anyPath(paths, /(^|\/)(train|training|finetune|finetuning|predict|inference)\.(py|ipynb)$/i)) s += 2;
+    if (anyPath(paths, /(^|\/)(models|checkpoints?|weights|pretrained)\//i)) s += 2;
+    if (anyPath(paths, /\.(onnx|pt|pth|h5|hdf5|ckpt|safetensors|gguf)$/i)) s += 2;
+    if (anyPath(paths, /(^|\/)(datasets?|data)\/(train|val|valid|test|eval)\//i)) s += 1;
+    if (anyPath(paths, /(^|\/)(notebooks?)\//i)) s += 1;
+    var joined = texts.slice(0, 40).map(function(t){ return t.text; }).join("\n").slice(0, 20000);
+    if (/torch|tensorflow|keras|scikit-learn|sklearn|jax|transformers|pytorch|onnx|huggingface/i.test(joined)) s += 2;
+    if (/import torch|from transformers|tf\.keras|nn\.Module|datasets\.load/i.test(joined)) s += 1;
+    return s;
+  }
+
+  // —— DevOps / CI 信号打分（避免误吞普通带 CI 的应用）——
+  function devopsScore(paths, texts){
+    var s = 0;
+    var ciN = countPath(paths, /(^|\/)\.github\/workflows\//i)
+            + (anyPath(paths, /\.gitlab-ci\.yml$/i) ? 1 : 0)
+            + (anyPath(paths, /Jenkinsfile$/i) ? 1 : 0)
+            + (anyPath(paths, /(^|\/)\.circleci\//i) ? 1 : 0)
+            + (anyPath(paths, /\.drone\.yml$/i) ? 1 : 0)
+            + (anyPath(paths, /\.travis\.yml$/i) ? 1 : 0);
+    if (ciN >= 1) s += 1;
+    if (ciN >= 2) s += 1;
+    if (anyPath(paths, /(Dockerfile|Containerfile|docker-compose\.yml|\.dockerignore)$/i)) s += 1;
+    if (anyPath(paths, /(^|\/)(k8s|kubernetes|manifests?|deploy|deployments|helm|charts|argocd|istio)\//i)) s += 2;
+    if (anyPath(paths, /(^|\/)(ansible|playbooks?|roles|group_vars|inventory)\//i)) s += 2;
+    if (anyPath(paths, /(^|\/)(scripts|bin)\/(deploy|cd|release|setup)(\.sh|\.py)?$/i)) s += 1;
+    var joined = texts.slice(0, 30).map(function(t){ return t.text; }).join("\n").slice(0, 15000);
+    if (/kubectl|helm (install|upgrade|template)|ansible-playbook|docker compose (up|build)|terraform (apply|plan)/i.test(joined)) s += 1;
+    return s;
+  }
+
+  // —— 微服务架构信号打分（多服务证据，避免单 server 误认）——
+  function microserviceScore(paths, texts){
+    var s = 0;
+    var svc = countPath(paths, /(^|\/)(services|apps|packages|cmd|deployments)\/[^/]+\/(package\.json|go\.mod|requirements\.txt|pom\.xml|Cargo\.toml|\.csproj|main\.(go|java|cs|rs|py))$/i);
+    if (svc >= 2) s += 3; else if (svc >= 1) s += 1;
+    if (anyPath(paths, /(^|\/)(api-gateway|gateway|gateway-api|edge)\//i)) s += 2;
+    if (anyPath(paths, /(^|\/)(proto|protos|grpc|pb)\//i) || anyPath(paths, /\.proto$/i)) s += 2;
+    if (countPath(paths, /(^|\/)(service|svc)[-_]?[a-z0-9]+\//i) >= 2) s += 2;
+    if (anyPath(paths, /(^|\/)(common|shared|libs|internal\/pkg|pkg)\//i)) s += 1;
+    var joined = texts.slice(0, 40).map(function(t){ return t.text; }).join("\n").slice(0, 20000);
+    if (/microservice|service mesh|api gateway|gRPC|grpc/i.test(joined)) s += 1;
+    return s;
+  }
+
   // —— 判断该用哪套模板 ——
   function detectProfile(paths, texts, type){
     var n = paths.length || 1;
@@ -644,6 +855,9 @@
 
     // 元项目 / 规则库：文档为主、源码极少
     if (mdR > 0.35 && srcR < 0.15 && mdN >= 3) return "meta";
+
+    // 桌面应用：Electron/Tauri/Qt/WPF，有 package.json 但不是 server
+    if (desktopScore(paths, texts) >= 3) return "desktop";
 
     // 小游戏 / 单文件交互作品：文件少、入口是 index.html、没有设计文档体系
     var noDesign = !anyPath(paths, /(^|\/)(gdd|design|production|art)\//i);
@@ -666,6 +880,13 @@
     // 数据工程：airflow dags + etl/spark 分层
     if (dataScore(paths, texts) >= 3) return "data";
 
+    // 移动原生：AndroidManifest / iOS 工程 / Flutter，比 server 特异，先认
+    if (mobileScore(paths, texts) >= 3) return "mobile";
+    // AI / 机器学习：模型权重 + 训练，比 data 更特异
+    if (aimlScore(paths, texts) >= 3) return "aiml";
+    // 微服务：多个独立服务 + 网关/契约，先于单 server 认
+    if (microserviceScore(paths, texts) >= 3) return "microservice";
+
     // 后端服务：必须排在 tool / lib / web 之前——
     // 后端项目文件往往不多，容易被 tool 抢走；而 web 的判定里含 routes/，
     // Express 这类项目会被误判成前端应用。
@@ -673,6 +894,9 @@
 
     // 命令行工具：有 bin / __main__ + 参数解析，但没后端分层（否则归 server）
     if (cliScore(paths, texts) >= 3) return "cli";
+
+    // DevOps / CI：CI + 容器/编排，放在内部工具之前，免得含 .sh 的仓库被误判成 tool
+    if (devopsScore(paths, texts) >= 3) return "devops";
 
     // 内部工具：文件很少，或就一两个 html / 脚本
     var singleHtml = paths.length <= 5 && anyPath(paths, /(^|\/)[^/]+\.html$/);
@@ -1156,6 +1380,61 @@
     6:"setup.py / pyproject / package bin / brew 公式 —— 一行装好"
   };
 
+  var MOBILE_PHASE_FILE = {
+    0:"AndroidManifest / *.xcodeproj / pubspec.yaml —— 平台工程初始化",
+    1:"ui/ screens/ —— UI 层（Activity/ViewController/SwiftUI/Compose）",
+    2:"data/ models/ —— 数据层（网络/数据库/Model）",
+    3:"navigation/ —— 导航与路由",
+    4:"native/ platform/ —— 原生能力（权限/相机/通知）",
+    5:"res/ Assets.xcassets/ —— 资源与国际化",
+    6:"fastlane/ 或签名配置 —— 构建、签名、发布到商店",
+    7:"tests/ —— 单元与 UI 测试"
+  };
+
+  var DESKTOP_PHASE_FILE = {
+    0:"main 进程 / App.xaml / src-tauri —— 应用入口与窗口",
+    1:"components/ renderer/ —— UI 层（Web 栈或 XAML/Qt）",
+    2:"native/ ipc/ —— 原生能力（文件/托盘/系统 API）",
+    3:"store/ db/ —— 状态与本地数据",
+    4:"electron-builder / tauri build —— 打包构建",
+    5:"updater/ —— 自动更新",
+    6:".dmg/.exe/.msi —— 安装分发",
+    7:"tests/ —— 单元与端到端测试"
+  };
+
+  var AIML_PHASE_FILE = {
+    0:"data/ datasets/ —— 数据集与预处理",
+    1:"train/ —— 训练与微调脚本",
+    2:"models/ —— 模型定义与结构",
+    3:"inference/ serve/ —— 推理与服务化",
+    4:"eval/ —— 评估与指标",
+    5:"configs/ experiments/ —— 配置与实验管理",
+    6:"notebooks/ —— 探索性笔记本",
+    7:"tests/ —— 数据/模型校验测试"
+  };
+
+  var DEVOPS_PHASE_FILE = {
+    0:".github/workflows/ 或 .gitlab-ci.yml —— CI 流水线",
+    1:"Dockerfile / docker-compose —— 容器化",
+    2:"k8s/ helm/ —— 编排与部署",
+    3:"ansible/ —— 配置管理",
+    4:"env/ secrets/ —— 环境与密钥",
+    5:"grafana/ prometheus/ —— 监控与日志",
+    6:"scripts/ —— 自动化脚本",
+    7:"README —— 运维文档"
+  };
+
+  var MICROSERVICE_PHASE_FILE = {
+    0:"services/ —— 服务拆分与边界",
+    1:"api-gateway/ —— 网关与路由",
+    2:"proto/ grpc/ —— 服务间通信契约",
+    3:"common/ shared/ —— 共享与公共模块",
+    4:"repositories/ migrations/ —— 每服务数据层",
+    5:"config/ discovery/ —— 配置与注册发现",
+    6:"docker-compose / k8s —— 部署编排",
+    7:"tests/ —— 契约与集成测试"
+  };
+
   function phaseGap(d, adv, maxId, fileMap, why){
     d.phases.list.forEach(function(p){
       if (!p.done && p.id <= maxId){
@@ -1503,6 +1782,111 @@
     if (!hasA.INSTALL) adv.push({ pri:"P3", tag:"分发", title:"补安装分发",
       detail:"setup.py / pyproject / package bin / brew 公式",
       why:"没有安装方式，别人得手动拷文件、改 PATH。" });
+    return sortAdv(adv);
+  }
+
+  function adviceMobile(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 6, MOBILE_PHASE_FILE, "移动端这环缺了，发版前会发现结构散、接手的人找不到入口。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：支持平台 + 怎么跑起来（安卓/iOS/Flutter 各自命令）",
+      why:"移动项目环境依赖多，没文档别人跑不起来。" });
+    if (!hasA.MANIFEST) adv.push({ pri:"P1", tag:"入口", title:"补平台清单",
+      detail:"AndroidManifest.xml / *.xcodeproj / pubspec.yaml",
+      why:"清单是平台的入口声明，缺了编译都过不了。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"tests/ 或对应测试目录：单元 + UI 测试",
+      why:"移动端回归成本最高，没测试不敢改。" });
+    if (!hasA.CI) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml：构建 + 测试 + 打包",
+      why:"手动打包容易漏签名、漏配置。" });
+    return sortAdv(adv);
+  }
+
+  function adviceDesktop(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 6, DESKTOP_PHASE_FILE, "桌面应用这环缺了，用户装不上或装完用不了。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：支持系统 + 怎么构建与运行",
+      why:"桌面应用依赖原生工具链，没文档难复现。" });
+    if (!hasA.ENTRY) adv.push({ pri:"P0", tag:"入口", title:"补应用入口",
+      detail:"main 进程 / App.xaml / src-tauri：单一启动入口",
+      why:"入口散在多文件，打包时容易漏掉主窗口。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"工程化", title:"补测试",
+      detail:"tests/：单元 + 端到端",
+      why:"桌面端状态多，没测试一改就崩。" });
+    if (!hasA.CI) adv.push({ pri:"P2", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/build.yml：多平台构建与签名",
+      why:"手动构建三个平台极易出错。" });
+    if (!hasA.INSTALL) adv.push({ pri:"P3", tag:"分发", title:"补安装包",
+      detail:".dmg / .exe / .msi / AppImage",
+      why:"没有安装包，用户得自己编译。" });
+    return sortAdv(adv);
+  }
+
+  function adviceAiml(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 6, AIML_PHASE_FILE, "ML 项目这环缺了，实验不可复现、模型没法交付。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补 README",
+      detail:"README.md：任务说明 + 数据来源 + 怎么训练/推理",
+      why:"ML 项目最怕别人不知道数据怎么来、怎么复现。" });
+    if (!hasA.DATA) adv.push({ pri:"P1", tag:"数据", title:"补数据说明",
+      detail:"data/ 或 DATA.md：数据集、预处理、划分方式",
+      why:"数据管线不写清，结果无法复现。" });
+    if (!hasA.WEIGHTS) adv.push({ pri:"P2", tag:"产物", title:"管理模型权重",
+      detail:"models/ 或 model registry，记录版本与来源",
+      why:"权重散落本地，换机器就丢了。" });
+    if (!hasA.TEST) adv.push({ pri:"P2", tag:"工程化", title:"补测试/校验",
+      detail:"tests/：数据校验 + 模型输出断言",
+      why:"数据和模型变了无感知，推理悄悄出错。" });
+    if (!hasA.CI) adv.push({ pri:"P3", tag:"工程化", title:"接入 CI",
+      detail:".github/workflows/ci.yml：lint + 数据/模型校验",
+      why:"ML 代码也要基本门禁。" });
+    return sortAdv(adv);
+  }
+
+  function adviceDevops(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 6, DEVOPS_PHASE_FILE, "这套 CI/部署链缺一环，发布就靠手工和运气。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补运维文档",
+      detail:"README / RUNBOOK：怎么部署、怎么回滚、找谁",
+      why:"出事时没文档，只能到处问。" });
+    if (!hasA.CI) adv.push({ pri:"P0", tag:"流水线", title:"补 CI 流水线",
+      detail:".github/workflows/ci.yml 或 .gitlab-ci.yml",
+      why:"没有 CI，每次上线都是手工。" });
+    if (!hasA.CONTAINER && !hasA.ORCH) adv.push({ pri:"P1", tag:"部署", title:"补容器/编排",
+      detail:"Dockerfile + k8s/helm 清单",
+      why:"没有容器化，环境差异会咬人。" });
+    if (!hasA.OBS) adv.push({ pri:"P2", tag:"可观测", title:"补监控日志",
+      detail:"grafana/prometheus 或集中日志",
+      why:"线上黑盒，出问题只能猜。" });
+    if (!hasA.TEST) adv.push({ pri:"P3", tag:"工程化", title:"补校验/测试",
+      detail:"对部署配置做 lint/校验（如 kubeconform）",
+      why:"配置错一个字段，发布就炸。" });
+    return sortAdv(adv);
+  }
+
+  function adviceMicroservice(d){
+    var adv = [], hasA = d.has;
+    phaseGap(d, adv, 6, MICROSERVICE_PHASE_FILE, "微服务这环缺了，服务一多就变成分布式大泥球。");
+    if (!hasA.README) adv.push({ pri:"P0", tag:"基础", title:"补总览文档",
+      detail:"README / docs/：服务清单 + 调用关系 + 怎么起全套",
+      why:"微服务没有地图，新人完全无从下手。" });
+    if (!hasA.GATEWAY) adv.push({ pri:"P1", tag:"入口", title:"补网关/路由",
+      detail:"api-gateway/：统一入口、鉴权、限流",
+      why:"没有网关，客户端直连各服务，耦合爆炸。" });
+    if (!hasA.CONTRACT) adv.push({ pri:"P1", tag:"契约", title:"补服务间契约",
+      detail:"proto/ grpc/ 或 OpenAPI，固定接口约定",
+      why:"接口口头约定，一改全崩。" });
+    if (!hasA.SHARED) adv.push({ pri:"P2", tag:"复用", title:"抽公共模块",
+      detail:"common/ shared/：鉴权、日志、错误码",
+      why:"每个服务重复造轮子，改一处要改 N 处。" });
+    if (!hasA.DEPLOY) adv.push({ pri:"P2", tag:"部署", title:"补部署编排",
+      detail:"docker-compose / k8s：一键起全套",
+      why:"手动起 N 个服务，本地都跑不全。" });
+    if (!hasA.TEST) adv.push({ pri:"P3", tag:"工程化", title:"补契约/集成测试",
+      detail:"tests/：服务间契约测试 + 集成测试",
+      why:"服务各自绿，合起来不一定绿。" });
     return sortAdv(adv);
   }
 
@@ -2055,6 +2439,8 @@
     PROFILE_ORDER: PROFILE_ORDER, serverScore: serverScore, hasFrontendSignal: hasFrontendSignal,
     iacScore: iacScore, embeddedScore: embeddedScore, extensionScore: extensionScore,
     dataScore: dataScore, cliScore: cliScore,
+    mobileScore: mobileScore, desktopScore: desktopScore, aimlScore: aimlScore,
+    devopsScore: devopsScore, microserviceScore: microserviceScore,
     analyzeEntries: analyzeEntries, readTexts: readTexts,
     // 下划线前缀 = 给测试用的内部接口
     _setSel: function(label, arr){ SEL[label] = arr; },

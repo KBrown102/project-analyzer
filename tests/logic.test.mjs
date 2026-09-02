@@ -175,6 +175,59 @@ const FIX = {
     "tool/src/main.py": "import argparse\nparser=argparse.ArgumentParser()\n",
     "tool/run.sh": "#!/usr/bin/env bash\nnode cli.js \"$@\"\n",
   },
+
+  // Electron 桌面应用 → desktop（electron 依赖 + main 进程，不能被 extension/web 抢）
+  desktop: {
+    "app/package.json": JSON.stringify({ name: "mdnote", main: "main.js", dependencies: { electron: "^28" } }),
+    "app/README.md": "# 桌面应用\n\n一个 Markdown 编辑器。",
+    "app/main.js": 'const { app, BrowserWindow } = require("electron");\nfunction create() {}\n',
+    "app/renderer/index.html": "<!DOCTYPE html><body>编辑器</body></html>\n",
+    "app/renderer/app.js": 'console.log("ui");\n',
+  },
+
+  // Android 原生应用 → mobile（AndroidManifest + res/，不被 server/generic 抢）
+  mobile: {
+    "app/AndroidManifest.xml": '<manifest package="com.example.todo"><application android:name=".App"></application></manifest>',
+    "app/build.gradle": "android { compileSdk 34 }\n",
+    "app/src/main/java/com/example/App.java": "package com.example;\npublic class App {}\n",
+    "app/src/main/java/com/example/MainActivity.java": "public class MainActivity {}\n",
+    "app/src/main/res/layout/activity_main.xml": "<LinearLayout></LinearLayout>\n",
+    "app/src/main/res/values/strings.xml": '<resources><string name="app_name">Todo</string></resources>\n',
+    "app/README.md": "# 安卓应用\n\n一个待办清单 App。",
+  },
+
+  // PyTorch 训练项目 → aiml（train.py + 权重 .pt + torch 依赖，不被 data 抢）
+  aiml: {
+    "ml/README.md": "# 训练\n\n图像分类模型。",
+    "ml/requirements.txt": "torch\ntorchvision\n",
+    "ml/train.py": "import torch\nmodel = torch.nn.Linear(10,2)\n",
+    "ml/models/cnn.py": "import torch.nn as nn\nclass Net(nn.Module): pass\n",
+    "ml/data/prepare.py": "def prepare(): pass\n",
+    "ml/checkpoints/best.pt": null,
+  },
+
+  // CI + k8s 运维仓库 → devops（.github/workflows + Dockerfile + k8s，不被 tool 抢）
+  devops: {
+    "ops/README.md": "# 部署\n\n服务的 CI 与 k8s 清单。",
+    "ops/.github/workflows/ci.yml": "name: CI\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n",
+    "ops/Dockerfile": "FROM node:18\nCMD node server.js\n",
+    "ops/k8s/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\n",
+    "ops/helm/Chart.yaml": "apiVersion: v2\nname: mychart\n",
+    "ops/scripts/deploy.sh": "#!/usr/bin/env bash\nkubectl apply -f k8s/\n",
+  },
+
+  // 多服务 Node 架构 → microservice（services/ 多个 + 网关 + proto，先于单 server 认）
+  microservice: {
+    "svc/README.md": "# 微服务项目\n\n订单与用户两个服务。",
+    "svc/api-gateway/index.js": "const express=require('express');\n",
+    "svc/api-gateway/package.json": JSON.stringify({ name: "gateway", dependencies: { express: "^4" } }),
+    "svc/services/user/package.json": JSON.stringify({ name: "user", dependencies: { express: "^4" } }),
+    "svc/services/user/src/server.js": "const express=require('express');\n",
+    "svc/services/order/package.json": JSON.stringify({ name: "order", dependencies: { express: "^4" } }),
+    "svc/services/order/src/server.js": "const express=require('express');\n",
+    "svc/proto/order.proto": "syntax = 'proto3';\n",
+    "svc/common/util.js": "module.exports = { id(){} };\n",
+  },
 };
 
 // ── 1. 每套模板都能被自动识别出来 ──────────────────────────────
@@ -261,6 +314,30 @@ C.eq("React 前端仍判 web", detected.web.profile, "web");
 // 对照组：Node 后端不能误判成 IaC / 数据工程
 C.ok("Express 后端不是 IaC", detected.server.profile !== "iac");
 C.ok("Express 后端不是数据工程", detected.server.profile !== "data");
+
+// ── 2c2. 第二批 5 类模板识别（桌面/移动/AI·ML/DevOps/微服务）────
+console.log("\n[2c2] 第二批 5 类识别");
+C.eq("桌面", detected.desktop.type, "桌面应用");
+C.eq("移动", detected.mobile.type, "移动原生应用");
+C.eq("AI", detected.aiml.type, "AI / 机器学习项目");
+C.eq("DevOps", detected.devops.type, "DevOps / CI 工程");
+C.eq("微服务", detected.microservice.type, "微服务架构");
+C.eq("桌面 profile", detected.desktop.profile, "desktop");
+C.eq("移动 profile", detected.mobile.profile, "mobile");
+C.eq("AI profile", detected.aiml.profile, "aiml");
+C.eq("DevOps profile", detected.devops.profile, "devops");
+C.eq("微服务 profile", detected.microservice.profile, "microservice");
+// 对照组：React 前端 / Express 后端 不能误判成这 5 类里的任何一类
+C.ok("React 前端不是桌面", detected.web.profile !== "desktop");
+C.ok("React 前端不是移动", detected.web.profile !== "mobile");
+C.ok("React 前端不是 AI", detected.web.profile !== "aiml");
+C.ok("React 前端不是 DevOps", detected.web.profile !== "devops");
+C.ok("React 前端不是微服务", detected.web.profile !== "microservice");
+C.ok("Express 后端不是 DevOps", detected.server.profile !== "devops");
+C.ok("Express 后端不是微服务", detected.server.profile !== "microservice");
+C.ok("Express 后端不是桌面", detected.server.profile !== "desktop");
+C.ok("Express 后端不是移动", detected.server.profile !== "mobile");
+C.ok("Express 后端不是 AI", detected.server.profile !== "aiml");
 
 // ── 3. 结果结构完整性 ──────────────────────────────────────────
 console.log("\n[3] 结果结构");
