@@ -68,14 +68,12 @@ assert("no legacy ARTIFACTS array", !/\bARTIFACTS\b/.test(html));
 ["build-electron/main.js", "build-electron/package.json", "assets/icon.ico", "assets/make-icon.py"].forEach((rel) =>
   assert(`${rel} exists`, fs.existsSync(path.join(root, rel)))
 );
-["build-desktop.bat", "build-desktop-ps.bat", "build-exe-electron.bat", "run-local-electron.bat",
-  "clean-build.bat"].forEach((rel) =>
+["build-exe-electron.bat", "clean-build.bat", "run.bat"].forEach((rel) =>
   assert(`${rel} exists`, fs.existsSync(path.join(root, rel)))
 );
 
 // bat 必须是 GBK，否则中文在 cmd 里会乱码。新增中文 bat 时记得加进这个列表。
-["build-desktop.bat", "build-desktop-ps.bat", "build-exe-electron.bat",
-  "clean-build.bat", "run-local-electron.bat"].forEach((rel) => {
+["build-exe-electron.bat", "clean-build.bat", "run.bat"].forEach((rel) => {
   const buf = fs.readFileSync(path.join(root, rel));
   const isUtf8Bom = buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
   assert(`${rel} not UTF-8-BOM`, !isUtf8Bom);
@@ -149,6 +147,36 @@ assert("exportJSONData 函数已定义", /function exportJSONData\(/.test(html))
 assert("顶部有导出 JSON 按钮 btnExportJSON", /id="btnExportJSON"/.test(html));
 assert("导出按钮已绑定 onclick", /getElementById\("btnExportJSON"\)/.test(html));
 assert("exportJSONData 已通过 __PA 暴露", typeof api.exportJSONData === "function");
+
+// ---------- P3：AI 辅助分析结构 ----------
+const aiFns = ["loadAIConfig","saveAIConfig","callAI","loadPrompt","parseAIJSON",
+  "saveAIMemory","listAIMemory","clearAIMemory","exportAIMemory"];
+aiFns.forEach((fn) => assert(`AI 模块函数 ${fn} 已定义`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
+aiFns.forEach((fn) => assert(`AI ${fn} 已通过 __PA 暴露`, typeof api[fn] === "function"));
+assert("AI_CONFIG_DEFAULTS 已定义", /AI_CONFIG_DEFAULTS\s*=/.test(html));
+assert("AI_CONFIG_DEFAULTS 已通过 __PA 暴露", api.AI_CONFIG_DEFAULTS && api.AI_CONFIG_DEFAULTS.baseURL === "https://api.openai.com/v1");
+assert("MAX_AI_MEMORY 已定义并暴露", typeof api.MAX_AI_MEMORY === "number" && api.MAX_AI_MEMORY === 50);
+assert("顶部有 AI 设置按钮 btnAISettings", /id="btnAISettings"/.test(html));
+assert("AI 设置按钮已绑定 onclick", /getElementById\("btnAISettings"\)/.test(html));
+assert("AI 配置抽屉 aiSettingsDrawer 存在", /id="aiSettingsDrawer"/.test(html));
+assert("AI 配置字段 aiEnabled 存在", /id="aiEnabled"/.test(html));
+assert("AI 配置字段 aiBaseURL 存在", /id="aiBaseURL"/.test(html));
+assert("AI 配置字段 aiApiKey 存在", /id="aiApiKey"/.test(html));
+assert("AI 配置字段 aiModel 存在", /id="aiModel"/.test(html));
+assert("AI 配置字段 aiPromptsDir 存在", /id="aiPromptsDir"/.test(html));
+assert("AI 保存按钮 aiSaveBtn 存在", /id="aiSaveBtn"/.test(html));
+assert("AI 测试连接按钮 aiTestBtn 存在", /id="aiTestBtn"/.test(html));
+assert("AI 导出记忆按钮 aiExportMemBtn 存在", /id="aiExportMemBtn"/.test(html));
+assert("AI 清空记忆按钮 aiClearMemBtn 存在", /id="aiClearMemBtn"/.test(html));
+assert("AI 设置按钮已绑定 openAISettings", /b\.onclick\s*=\s*openAISettings/.test(html));
+assert("AI 保存按钮已绑定 saveAISettingsFromUI", /b\.onclick\s*=\s*saveAISettingsFromUI/.test(html));
+assert("prompts/ 目录存在", fs.existsSync(path.join(root, "prompts")));
+["purpose","rules","spec","step-check","summary"].forEach((name) =>
+  assert(`prompts/${name}.md exists`, fs.existsSync(path.join(root, "prompts", name + ".md")))
+);
+assert("step-check.md 含占位符 {{stepType}}", /{{stepType}}/.test(fs.readFileSync(path.join(root, "prompts", "step-check.md"), "utf8")));
+assert("step-check.md 含占位符 {{dataSummary}}", /{{dataSummary}}/.test(fs.readFileSync(path.join(root, "prompts", "step-check.md"), "utf8")));
+assert("summary.md 含占位符 {{fullData}}", /{{fullData}}/.test(fs.readFileSync(path.join(root, "prompts", "summary.md"), "utf8")));
 
 // ---------- 文档 ----------
 assert("README.md exists", fs.existsSync(path.join(root, "README.md")));

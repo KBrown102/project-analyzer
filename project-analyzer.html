@@ -149,6 +149,23 @@
   .btn-text{background:transparent;border:1px solid var(--line);color:var(--tx2);padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer}
   .btn-text:hover{border-color:var(--ok);color:var(--ok)}
   .btn-text.danger:hover{border-color:var(--warn);color:var(--warn)}
+  .ai-cfg-row{margin-bottom:10px}
+  .ai-cfg-row label{display:block;font-size:12px;color:var(--tx2);margin-bottom:4px}
+  .ai-cfg-row input[type=text],.ai-cfg-row input[type=password]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;background:var(--bg2);color:var(--tx)}
+  .ai-cfg-row input[type=checkbox]{margin-right:6px}
+  #btnAISettings.ai-on{border-color:var(--ok);color:var(--ok)}
+  .ai-check{display:inline-block;background:transparent;border:1px solid var(--line);color:var(--tx3);padding:1px 6px;border-radius:4px;font-size:11px;cursor:pointer;margin-left:6px;vertical-align:middle}
+  .ai-check:hover{border-color:var(--accent);color:var(--accent)}
+  .ai-result{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;background:var(--bg2)}
+  .ai-result .ai-acc{font-weight:600;font-size:12px;padding:1px 6px;border-radius:4px}
+  .ai-result .ai-acc.high{background:rgba(46,160,67,.15);color:var(--ok)}
+  .ai-result .ai-acc.medium{background:rgba(214,160,0,.15);color:var(--warn)}
+  .ai-result .ai-acc.low{background:rgba(230,0,0,.15);color:var(--warn)}
+  .ai-result .ai-reason,.ai-result .ai-sugg{font-size:12px;color:var(--tx2);margin-top:4px;line-height:1.5}
+  .ai-result label{font-size:11px;color:var(--tx3);margin-top:4px;display:inline-block}
+  .ai-summary-card{border:1px solid var(--accent);border-radius:8px;padding:12px;margin:10px 0;background:var(--bg2)}
+  .ai-summary-card .ai-sum-text{font-size:13px;color:var(--tx);line-height:1.6;margin-bottom:8px}
+  .ai-summary-card .ai-sum-list{font-size:12px;color:var(--tx2);margin:4px 0 4px 16px}
 </style>
 </head>
 <body>
@@ -162,6 +179,7 @@
     <button id="btnClear">清空</button>
     <button id="btnHistory">历史</button>
     <button id="btnExportJSON">导出 JSON</button>
+    <button id="btnAISettings">AI 设置</button>
     <div class="mode">
       <button id="mSingle" class="on">单项目</button>
       <button id="mCompare">对比</button>
@@ -190,6 +208,43 @@
     <div class="modal-card">
       <div class="modal-head"><b>历史详情</b><button id="btnCloseDetail" class="btn-text">关闭</button></div>
       <div id="histDetailBody" class="modal-body"></div>
+    </div>
+  </div>
+  <div id="aiSettingsDrawer" class="drawer hidden">
+    <div class="drawer-head">
+      <b>AI 辅助设置</b>
+      <button id="btnCloseAISettings" class="btn-text">关闭</button>
+    </div>
+    <div class="drawer-body" style="max-width:520px">
+      <div class="ai-cfg-row">
+        <label><input type="checkbox" id="aiEnabled"> 启用 AI 辅助（需先填 API key）</label>
+      </div>
+      <div class="ai-cfg-row">
+        <label>Base URL（OpenAI 兼容）</label>
+        <input type="text" id="aiBaseURL" placeholder="https://api.openai.com/v1" style="width:100%">
+      </div>
+      <div class="ai-cfg-row">
+        <label>API Key</label>
+        <input type="password" id="aiApiKey" placeholder="sk-..." style="width:100%">
+      </div>
+      <div class="ai-cfg-row">
+        <label>Model</label>
+        <input type="text" id="aiModel" placeholder="gpt-4o-mini" style="width:100%">
+      </div>
+      <div class="ai-cfg-row">
+        <label>提示词目录</label>
+        <input type="text" id="aiPromptsDir" placeholder="prompts" style="width:100%">
+      </div>
+      <div class="ai-cfg-row" style="margin-top:12px">
+        <button id="aiTestBtn" class="btn-text">测试连接</button>
+        <button id="aiSaveBtn" class="btn-text" style="background:var(--accent);color:#fff">保存</button>
+        <button id="aiExportMemBtn" class="btn-text">导出记忆</button>
+        <button id="aiClearMemBtn" class="btn-text danger">清空记忆</button>
+      </div>
+      <div style="margin-top:12px;color:var(--tx3);font-size:12px;line-height:1.6">
+        支持任何 OpenAI 兼容接口（DeepSeek / 通义 / Kimi 等）。填好 base URL + key + model 即可。<br>
+        提示词文件在 prompts/ 目录，可编辑调整 AI 行为。API key 只存在本地 localStorage，不上传任何地方。
+      </div>
     </div>
   </div>
 
@@ -2892,6 +2947,247 @@
     document.getElementById("histDetail").className = "modal hidden";
   }
 
+  // —— AI 辅助分析模块（P3）——
+  var AI_CONFIG_KEY = "pa_ai_cfg_v1";
+  var AI_MEMORY_KEY = "pa_ai_memory_v1";
+  var MAX_AI_MEMORY = 50;
+  var AI_MEM_SEQ = 0;
+  var AI_CONFIG_DEFAULTS = {
+    enabled: false,
+    baseURL: "https://api.openai.com/v1",
+    apiKey: "",
+    model: "gpt-4o-mini",
+    promptsDir: "prompts"
+  };
+
+  function aiHasLS(){
+    try {
+      var k = "__pa_probe";
+      localStorage.setItem(k, "1");
+      localStorage.removeItem(k);
+      return true;
+    } catch (e) { return false; }
+  }
+  var AI_HAS_LS = aiHasLS();
+
+  function loadAIConfig(){
+    var cfg = {};
+    try {
+      var raw = localStorage.getItem(AI_CONFIG_KEY);
+      if (raw) cfg = JSON.parse(raw);
+    } catch (e) { cfg = {}; }
+    var out = {};
+    for (var k in AI_CONFIG_DEFAULTS) {
+      out[k] = (cfg[k] !== undefined && cfg[k] !== null) ? cfg[k] : AI_CONFIG_DEFAULTS[k];
+    }
+    if (!out.apiKey) out.enabled = false;
+    return out;
+  }
+
+  function saveAIConfig(cfg){
+    if (!AI_HAS_LS) return false;
+    try {
+      localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(cfg));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // 内置兜底提示词（prompts/ 读不到时用，保证功能可用）
+  var AI_FALLBACK_PROMPTS = {
+    "rules": "你是项目结构分析器的 AI 复核员。用简体中文回答，给理由，标可忽略，严格按 JSON 格式输出，不要输出 JSON 以外的文字。",
+    "step-check": '判断这条 {{stepType}}="{{stepId}}" 的分析是否准确。项目摘要：{{dataSummary}}。输出 JSON：{"accuracy":"high|medium|low","reason":"理由","canIgnore":true|false,"suggestion":"建议"}',
+    "summary": '基于全数据分析项目结构健康度。数据：{{fullData}}。输出 JSON：{"summary":"整体总结","gaps":["缺口"],"suggestions":["建议"]}',
+    "purpose": "项目结构分析器基于 CCGS 框架分析本地项目。AI 辅助复核分析准确性并补充总结。",
+    "spec": '每步校验返回 {"accuracy":"high|medium|low","reason":"理由","canIgnore":bool,"suggestion":"建议"}；整体总结返回 {"summary":"总结","gaps":[],"suggestions":[]}'
+  };
+
+  function loadPrompt(name, vars){
+    var tmpl = null;
+    var cfg = loadAIConfig();
+    var dir = (cfg.promptsDir || "prompts").replace(/\/+$/, "");
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", dir + "/" + name + ".md", false);
+      xhr.send();
+      if (xhr.status === 200 && xhr.responseText) tmpl = xhr.responseText;
+    } catch (e) { /* CORS 或文件不存在，用兜底 */ }
+    if (!tmpl) tmpl = AI_FALLBACK_PROMPTS[name] || "";
+    if (vars) {
+      for (var k in vars) {
+        tmpl = tmpl.split("{{" + k + "}}").join(String(vars[k]));
+      }
+    }
+    return tmpl;
+  }
+
+  function callAI(messages, opts){
+    var cfg = loadAIConfig();
+    if (!cfg.enabled || !cfg.apiKey) {
+      return Promise.resolve({ ok: false, error: "AI 未启用或未配置 API key" });
+    }
+    var url = cfg.baseURL.replace(/\/+$/, "") + "/chat/completions";
+    var body = {
+      model: cfg.model,
+      messages: messages,
+      temperature: (opts && opts.temperature) || 0.3
+    };
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + cfg.apiKey
+      },
+      body: JSON.stringify(body)
+    }).then(function(res){
+      if (!res.ok) {
+        if (res.status === 401) return { ok: false, error: "API key 无效（401）" };
+        if (res.status === 429) return { ok: false, error: "额度不足或请求过频（429）" };
+        return { ok: false, error: "HTTP " + res.status };
+      }
+      return res.json().then(function(j){
+        var content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+        if (!content) return { ok: false, error: "AI 返回为空" };
+        return { ok: true, data: content };
+      });
+    }).catch(function(e){
+      return { ok: false, error: "网络失败：" + (e && e.message ? e.message : String(e)) };
+    });
+  }
+
+  // 解析 AI 返回的 JSON（strip ```json 围栏 + try/catch 兜底原文）
+  function parseAIJSON(text){
+    if (!text) return null;
+    var s = String(text).trim();
+    if (s.indexOf("```") === 0) {
+      s = s.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "").trim();
+    }
+    try { return JSON.parse(s); } catch (e) { return null; }
+  }
+
+  // —— AI 记忆留存 ——
+  function saveAIMemory(item){
+    if (!AI_HAS_LS) return;
+    try {
+      var arr = [];
+      var raw = localStorage.getItem(AI_MEMORY_KEY);
+      if (raw) arr = JSON.parse(raw) || [];
+      arr.unshift({
+        id: Date.now() + (AI_MEM_SEQ++),
+        ts: new Date().toISOString(),
+        project: item.project || "",
+        stepType: item.stepType || "",
+        stepId: item.stepId || "",
+        accuracy: item.accuracy || "",
+        reason: item.reason || "",
+        canIgnore: !!item.canIgnore,
+        suggestion: item.suggestion || ""
+      });
+      if (arr.length > MAX_AI_MEMORY) arr = arr.slice(0, MAX_AI_MEMORY);
+      localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(arr));
+    } catch (e) { /* 静默降级 */ }
+  }
+
+  function listAIMemory(){
+    if (!AI_HAS_LS) return [];
+    try {
+      var raw = localStorage.getItem(AI_MEMORY_KEY);
+      return raw ? (JSON.parse(raw) || []) : [];
+    } catch (e) { return []; }
+  }
+
+  function clearAIMemory(){
+    if (!AI_HAS_LS) return;
+    try { localStorage.removeItem(AI_MEMORY_KEY); } catch (e) { }
+  }
+
+  function exportAIMemory(){
+    var arr = listAIMemory();
+    if (!arr.length) return "# AI 辅助分析记忆 · 导出\n\n（暂无记录）\n";
+    var groups = {};
+    arr.forEach(function(it){
+      var k = it.project || "(未命名)";
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(it);
+    });
+    var L = ["# AI 辅助分析记忆 · 导出时间 " + new Date().toISOString().slice(0,19).replace("T"," ") + "\n"];
+    Object.keys(groups).forEach(function(proj){
+      L.push("\n## 项目：" + proj + "\n");
+      groups[proj].forEach(function(it){
+        L.push("\n### [" + it.stepType + "] " + it.stepId + " · 准确性：" + it.accuracy + "\n");
+        L.push("- 时间：" + (it.ts || "").slice(0,19).replace("T"," ") + "\n");
+        L.push("- 理由：" + (it.reason || "") + "\n");
+        if (it.suggestion) L.push("- 建议：" + it.suggestion + "\n");
+        L.push("- 可忽略：" + (it.canIgnore ? "是" : "否") + "\n");
+      });
+    });
+    return L.join("");
+  }
+
+  // —— 配置面板 UI ——
+  function openAISettings(){
+    var cfg = loadAIConfig();
+    var el;
+    el = document.getElementById("aiEnabled"); if (el) el.checked = !!cfg.enabled;
+    el = document.getElementById("aiBaseURL"); if (el) el.value = cfg.baseURL;
+    el = document.getElementById("aiApiKey"); if (el) el.value = cfg.apiKey;
+    el = document.getElementById("aiModel"); if (el) el.value = cfg.model;
+    el = document.getElementById("aiPromptsDir"); if (el) el.value = cfg.promptsDir;
+    document.getElementById("aiSettingsDrawer").className = "drawer";
+  }
+  function closeAISettings(){
+    document.getElementById("aiSettingsDrawer").className = "drawer hidden";
+  }
+  function saveAISettingsFromUI(){
+    var cfg = {
+      enabled: document.getElementById("aiEnabled").checked,
+      baseURL: document.getElementById("aiBaseURL").value.trim() || AI_CONFIG_DEFAULTS.baseURL,
+      apiKey: document.getElementById("aiApiKey").value.trim(),
+      model: document.getElementById("aiModel").value.trim() || AI_CONFIG_DEFAULTS.model,
+      promptsDir: document.getElementById("aiPromptsDir").value.trim() || AI_CONFIG_DEFAULTS.promptsDir
+    };
+    if (!cfg.apiKey) cfg.enabled = false;
+    saveAIConfig(cfg);
+    closeAISettings();
+    updateAIBadge();
+    render();
+    toast(cfg.enabled ? "AI 辅助已启用" : "AI 辅助设置已保存（未启用）");
+  }
+  function testAIConnection(){
+    var btn = document.getElementById("aiTestBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "测试中…"; }
+    // 临时读 UI 值测试（不要求先保存）
+    var cfg = {
+      enabled: true,
+      baseURL: document.getElementById("aiBaseURL").value.trim() || AI_CONFIG_DEFAULTS.baseURL,
+      apiKey: document.getElementById("aiApiKey").value.trim(),
+      model: document.getElementById("aiModel").value.trim() || AI_CONFIG_DEFAULTS.model,
+      promptsDir: "prompts"
+    };
+    if (!cfg.apiKey) { toast("请先填 API key"); if (btn) { btn.disabled = false; btn.textContent = "测试连接"; } return; }
+    var url = cfg.baseURL.replace(/\/+$/, "") + "/chat/completions";
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.apiKey },
+      body: JSON.stringify({ model: cfg.model, messages: [{ role: "user", content: "ping" }], temperature: 0 })
+    }).then(function(res){
+      if (btn) { btn.disabled = false; btn.textContent = "测试连接"; }
+      if (res.ok) toast("连接正常（HTTP " + res.status + "）");
+      else if (res.status === 401) toast("API key 无效（401）");
+      else if (res.status === 429) toast("额度不足或请求过频（429）");
+      else toast("连接失败（HTTP " + res.status + "）");
+    }).catch(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = "测试连接"; }
+      toast("网络失败：" + (e && e.message ? e.message : String(e)));
+    });
+  }
+  function updateAIBadge(){
+    var btn = document.getElementById("btnAISettings");
+    if (!btn) return;
+    var cfg = loadAIConfig();
+    btn.className = cfg.enabled ? "ai-on" : "";
+    btn.textContent = "AI 设置" + (cfg.enabled ? " ●" : "");
+  }
+
   // —— 绑定 + 初始化（script 在 body 末尾，DOM 已就绪）——
   (function bindHistoryUI(){
     var b;
@@ -2918,6 +3214,26 @@
       }
     });
     updateHistoryBadge();
+  })();
+
+  (function bindAIUI(){
+    var b;
+    b = document.getElementById("btnAISettings"); if (b) b.onclick = openAISettings;
+    b = document.getElementById("btnCloseAISettings"); if (b) b.onclick = closeAISettings;
+    b = document.getElementById("aiSaveBtn"); if (b) b.onclick = saveAISettingsFromUI;
+    b = document.getElementById("aiTestBtn"); if (b) b.onclick = testAIConnection;
+    b = document.getElementById("aiExportMemBtn");
+    if (b) b.onclick = function(){
+      var text = exportAIMemory();
+      download("ai-memory-" + new Date().toISOString().slice(0,10) + ".md", text);
+    };
+    b = document.getElementById("aiClearMemBtn");
+    if (b) b.onclick = function(){
+      if (!confirm("确定清空所有 AI 记忆记录？")) return;
+      clearAIMemory();
+      toast("已清空 AI 记忆");
+    };
+    updateAIBadge();
   })();
 
   function onLoaded(which, data, slot){
@@ -3099,7 +3415,14 @@
     deleteHistory: deleteHistory, clearHistory: clearHistory,
     snapshotFromData: snapshotFromData, updateHistoryBadge: updateHistoryBadge,
     // P2 方向 3：JSON 导出（供测试序列化逻辑，不含 Blob/URL 依赖）
-    exportJSONData: exportJSONData
+    exportJSONData: exportJSONData,
+    // P3：AI 辅助分析（配置/调用/记忆/解析，供测试）
+    loadAIConfig: loadAIConfig, saveAIConfig: saveAIConfig,
+    callAI: callAI, loadPrompt: loadPrompt, parseAIJSON: parseAIJSON,
+    saveAIMemory: saveAIMemory, listAIMemory: listAIMemory,
+    clearAIMemory: clearAIMemory, exportAIMemory: exportAIMemory,
+    AI_CONFIG_DEFAULTS: AI_CONFIG_DEFAULTS, MAX_AI_MEMORY: MAX_AI_MEMORY,
+    AI_HAS_LS: AI_HAS_LS, AI_FALLBACK_PROMPTS: AI_FALLBACK_PROMPTS
   };
   render();
 })();
