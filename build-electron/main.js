@@ -3,6 +3,18 @@ const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron");
 const path = require("path");
 const { scanDir } = require("./scanner");
 
+// 隔离 userData，避免打包后的 portable exe 与开发态共享 %APPDATA%\project-analyzer\
+// 现象：打包后 exe 一启动就看到开发测试时填的 API key / 历史记录 / AI 记忆，
+//       看起来像"打进 exe 里了"，其实是 Electron 默认 userData 路径共享。
+// portable exe 运行时 electron-builder 会注入 PORTABLE_EXECUTABLE_DIR 环境变量，
+// 指向 exe 所在目录；此时数据落在 exe 同级 .data\ 子目录，随 exe 走、删 .data 即清空。
+// 开发态 npm start 落在 build-electron\.data\（已在 .gitignore 忽略），与打包产物完全隔离。
+const isPortable = !!process.env.PORTABLE_EXECUTABLE_DIR;
+const userDataDir = isPortable
+  ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, ".data")
+  : path.join(__dirname, ".data");
+app.setPath("userData", userDataDir);
+
 let mainWindow = null;
 
 function createWindow() {

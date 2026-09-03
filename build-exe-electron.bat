@@ -36,6 +36,14 @@ echo   复制页面文件与图标...
 copy /Y "%SRC%" "%BUILD%\project-analyzer.html" >nul
 copy /Y "%ICON%" "%BUILD%\icon.ico" >nul
 
+rem 同步 prompts/ 目录（AI 提示词文件，loadPrompt 在 exe 里用 XHR 同步取）
+xcopy /Y /I /Q "%~dp0prompts\*" "%BUILD%\prompts\" >nul
+if errorlevel 1 (
+  echo   [警告] prompts/ 同步失败，AI 辅助功能将走兜底提示词。
+) else (
+  echo   prompts/ 已同步到 build-electron\
+)
+
 cd /d "%BUILD%"
 
 rem ---------- 国内镜像 + 跳过 Electron 下载证书验证 ----------

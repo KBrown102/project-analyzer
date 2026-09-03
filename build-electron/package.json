@@ -19,7 +19,8 @@
       "preload.js",
       "scanner.js",
       "project-analyzer.html",
-      "icon.ico"
+      "icon.ico",
+      "prompts/**"
     ],
     "directories": {
       "output": "dist-out"

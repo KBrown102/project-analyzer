@@ -177,6 +177,21 @@ assert("prompts/ 目录存在", fs.existsSync(path.join(root, "prompts")));
 assert("step-check.md 含占位符 {{stepType}}", /{{stepType}}/.test(fs.readFileSync(path.join(root, "prompts", "step-check.md"), "utf8")));
 assert("step-check.md 含占位符 {{dataSummary}}", /{{dataSummary}}/.test(fs.readFileSync(path.join(root, "prompts", "step-check.md"), "utf8")));
 assert("summary.md 含占位符 {{fullData}}", /{{fullData}}/.test(fs.readFileSync(path.join(root, "prompts", "summary.md"), "utf8")));
+
+// —— P4：build-electron/prompts/ 副本与根一致 + package.json files 含 prompts ——
+// 漂移再现防止：sync-electron.mjs 只同步 HTML 时，prompts/ 副本会落后，
+// 打包后 exe 启用 AI 会走兜底提示词，用户编辑的提示词不生效。
+assert("build-electron/prompts/ 目录存在", fs.existsSync(path.join(root, "build-electron", "prompts")));
+["purpose","rules","spec","step-check","summary"].forEach((name) => {
+  const srcP = path.join(root, "prompts", name + ".md");
+  const dstP = path.join(root, "build-electron", "prompts", name + ".md");
+  assert(`build-electron/prompts/${name}.md 存在`, fs.existsSync(dstP));
+  assert(`build-electron/prompts/${name}.md 与根一致`, fs.readFileSync(srcP).equals(fs.readFileSync(dstP)));
+});
+assert("package.json files 含 prompts/**",
+  pkg.build.files.some((f) => typeof f === "string" && f.includes("prompts")));
+// P4：main.js userData 隔离（防打包后 exe 共享 %APPDATA% 残留 API key / 历史）
+assert("main.js 显式 setPath userData", mainJs.includes('app.setPath("userData"'));
 assert("aiSummary 函数已定义", /function\s+aiSummary\s*\(/.test(html));
 assert("showAISummary 函数已定义", /function\s+showAISummary\s*\(/.test(html));
 assert("AI 总结按钮 data-act=\"ai-summary\" 存在", /data-act="ai-summary"/.test(html));
