@@ -123,6 +123,25 @@ if (htmlNoise && scannerNoise) {
     `html 多: ${onlyHtml.join(",")} | scanner 多: ${onlyScan.join(",")}`);
 }
 
+// ---------- P2 方向 1：历史快照留存钩子结构 ----------
+assert("HISTORY_KEY 暴露为非空字符串", typeof api.HISTORY_KEY === "string" && api.HISTORY_KEY.length > 0);
+assert("MAX_HISTORY=20", api.MAX_HISTORY === 20);
+assert("saveHistory 暴露为函数", typeof api.saveHistory === "function");
+assert("listHistory 暴露为函数", typeof api.listHistory === "function");
+assert("deleteHistory 暴露为函数", typeof api.deleteHistory === "function");
+assert("clearHistory 暴露为函数", typeof api.clearHistory === "function");
+assert("snapshotFromData 暴露为函数", typeof api.snapshotFromData === "function");
+assert("updateHistoryBadge 暴露为函数", typeof api.updateHistoryBadge === "function");
+assert("顶部有历史按钮 btnHistory", /id="btnHistory"/.test(html));
+assert("历史抽屉骨架 historyDrawer", /id="historyDrawer"/.test(html));
+assert("历史详情模态 histDetail", /id="histDetail"/.test(html));
+assert("drawer CSS 已定义", /\.drawer\{/.test(html));
+assert("modal CSS 已定义", /\.modal\{/.test(html));
+assert("hidden CSS 已定义", /\.hidden\{/.test(html));
+assert("onLoaded 接入了 saveHistory(data)", /saveHistory\(data\)/.test(html));
+assert("onLoaded 接入了 updateHistoryBadge()", /updateHistoryBadge\(\)/.test(html));
+assert("localStorage 降级守卫 HAS_LS", /HAS_LS/.test(html));
+
 // ---------- 文档 ----------
 assert("README.md exists", fs.existsSync(path.join(root, "README.md")));
 

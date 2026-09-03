@@ -42,8 +42,16 @@ export function loadAnalyzer(htmlPath = path.join(root, "project-analyzer.html")
     createElement(tag) { return mkEl(tag); },
   };
   const window = {};
+  // localStorage mock（P2 方向 1 历史快照测试需要；让 HAS_LS 检测通过，saveHistory 才会真存）
+  const lsStore = new Map();
+  const localStorage = {
+    getItem: (k) => (lsStore.has(k) ? lsStore.get(k) : null),
+    setItem: (k, v) => { lsStore.set(k, String(v)); },
+    removeItem: (k) => { lsStore.delete(k); },
+    clear: () => { lsStore.clear(); },
+  };
 
-  const ctx = vm.createContext({ document, window, console });
+  const ctx = vm.createContext({ document, window, console, localStorage });
   vm.runInContext(m[1], ctx, { filename: "project-analyzer.html<script>" });
 
   if (!window.__PA) throw new Error("脚本跑完了但 window.__PA 没挂上");

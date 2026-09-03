@@ -122,6 +122,33 @@
   .head-row{display:flex;font-size:12px;color:var(--tx3);padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:4px}
   .head-row .k{width:150px;flex:none}
   .head-row .a,.head-row .b{flex:1}
+  /* —— 历史抽屉 / 详情模态（P2 方向 1 留存钩子）—— */
+  .hidden{display:none !important}
+  .drawer{position:fixed;top:0;right:0;width:380px;max-width:92vw;height:100vh;background:var(--bg);
+          border-left:1px solid var(--line);box-shadow:-4px 0 24px rgba(0,0,0,.4);z-index:200;
+          display:flex;flex-direction:column}
+  .drawer-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .drawer-head b{margin-right:auto}
+  .drawer-head #histCount{color:var(--tx3);font-size:12px}
+  .drawer-body{flex:1;overflow:auto;padding:8px 12px}
+  .hist-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+  .hist-item .h-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .hist-item .h-name{font-weight:600;font-size:13px;color:var(--tx)}
+  .hist-item .h-ts{font-size:11px;color:var(--tx3)}
+  .hist-item .h-meta{font-size:12px;color:var(--tx2);margin-top:4px;line-height:1.6}
+  .hist-item .h-acts{margin-top:8px;display:flex;gap:6px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:210;display:flex;align-items:center;justify-content:center}
+  .modal-card{background:var(--bg);border:1px solid var(--line);border-radius:10px;max-width:480px;width:90vw;max-height:80vh;display:flex;flex-direction:column}
+  .modal-head{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .modal-head b{margin-right:auto}
+  .modal-body{padding:16px;overflow:auto;font-size:13px;line-height:1.8}
+  .modal-body .mb-row{display:flex;border-bottom:1px solid var(--line);padding:6px 0}
+  .modal-body .mb-row:last-child{border:none}
+  .modal-body .mb-k{width:96px;color:var(--tx3);flex:none}
+  .modal-body .mb-v{color:var(--tx)}
+  .btn-text{background:transparent;border:1px solid var(--line);color:var(--tx2);padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer}
+  .btn-text:hover{border-color:var(--ok);color:var(--ok)}
+  .btn-text.danger:hover{border-color:var(--warn);color:var(--warn)}
 </style>
 </head>
 <body>
@@ -133,6 +160,7 @@
     <button id="btnA">选择项目 A</button>
     <button id="btnB">选择项目 B（对比用）</button>
     <button id="btnClear">清空</button>
+    <button id="btnHistory">历史</button>
     <div class="mode">
       <button id="mSingle" class="on">单项目</button>
       <button id="mCompare">对比</button>
@@ -147,6 +175,22 @@
   <div class="slot" id="slotB">项目 B：未选择（对比模式需要）</div>
 
   <div id="out"></div>
+
+  <div id="historyDrawer" class="drawer hidden">
+    <div class="drawer-head">
+      <b>历史记录</b>
+      <span id="histCount"></span>
+      <button id="btnClearHist" class="btn-text danger">清空全部</button>
+      <button id="btnCloseHist" class="btn-text">关闭</button>
+    </div>
+    <div id="histList" class="drawer-body"></div>
+  </div>
+  <div id="histDetail" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><b>历史详情</b><button id="btnCloseDetail" class="btn-text">关闭</button></div>
+      <div id="histDetailBody" class="modal-body"></div>
+    </div>
+  </div>
 
   <div class="note">
     说明：目录读取用的是 <code>&lt;input webkitdirectory&gt;</code>，直接在本地浏览器完成，无需起服务器，也不会联网。
@@ -2649,10 +2693,206 @@
     return txt;
   }
 
+  // —— 历史快照留存钩子（P2 方向 1）——
+  // 每次分析成功后自动把摘要存入 localStorage，用户可回看历史记录。
+  // 不存完整路径树（防超 5MB 配额），只存摘要级字段。
+  // localStorage 不可用 / 配额满 / 序列化失败 → 静默降级，不阻断主功能。
+  var HISTORY_KEY = "pa_history_v1";
+  var MAX_HISTORY = 20;
+  var HIST_SEQ = 0; // 快照 id 自增计数器，防同毫秒 Date.now() 撞 id 导致误删
+  var HAS_LS = (function(){
+    try {
+      var k = "__pa_probe";
+      localStorage.setItem(k, "1");
+      localStorage.removeItem(k);
+      return true;
+    } catch (e) { return false; }
+  })();
+
+  function snapshotFromData(d){
+    var phaseDone = 0, phaseTotal = 0, artDone = 0, artTotal = 0;
+    if (d.phases && d.phases.list){
+      phaseTotal = d.phases.list.length;
+      phaseDone = d.phases.list.filter(function(p){ return p.done; }).length;
+    }
+    if (d.artifacts){
+      artTotal = d.artifacts.length;
+      artDone = d.artifacts.filter(function(a){ return a.has; }).length;
+    }
+    return {
+      id: Date.now() + (HIST_SEQ++),
+      ts: new Date().toISOString(),
+      label: d.label,
+      root: d.root,
+      name: d.name,
+      files: d.files,
+      type: d.type,
+      auto: d.auto,
+      profile: d.profile,
+      profileName: d.profileName,
+      phaseDone: phaseDone,
+      phaseTotal: phaseTotal,
+      artifactDone: artDone,
+      artifactTotal: artTotal,
+      truncated: !!d.truncated
+    };
+  }
+
+  function listHistory(){
+    if (!HAS_LS) return [];
+    try {
+      var raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  function saveHistory(d){
+    if (!HAS_LS || !d) return null;
+    try {
+      var snap = snapshotFromData(d);
+      var arr = listHistory();
+      arr.unshift(snap);
+      while (arr.length > MAX_HISTORY) arr.pop();
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+      return snap;
+    } catch (e) { return null; }
+  }
+
+  function deleteHistory(id){
+    if (!HAS_LS) return;
+    try {
+      var arr = listHistory().filter(function(h){ return h.id !== id; });
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+    } catch (e) {}
+  }
+
+  function clearHistory(){
+    if (!HAS_LS) return;
+    try { localStorage.removeItem(HISTORY_KEY); } catch (e) {}
+  }
+
+  function updateHistoryBadge(){
+    var btn = document.getElementById("btnHistory");
+    if (!btn) return;
+    var n = listHistory().length;
+    btn.textContent = n > 0 ? "历史 (" + n + "/" + MAX_HISTORY + ")" : "历史";
+  }
+
+  // —— 历史抽屉 UI（P2 方向 1）——
+  function fmtTime(iso){
+    try {
+      var d = new Date(iso);
+      var p = function(n){ return n < 10 ? "0" + n : "" + n; };
+      return d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate()) +
+             " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    } catch (e) { return iso; }
+  }
+
+  function renderHistoryList(){
+    var list = document.getElementById("histList");
+    var countEl = document.getElementById("histCount");
+    if (!list) return;
+    var arr = listHistory();
+    if (countEl) countEl.textContent = arr.length + " 条";
+    if (!arr.length){
+      list.innerHTML = '<div class="empty" style="padding:24px;text-align:center;color:var(--tx3)">还没有历史记录。分析一次项目后，这里会自动存档。</div>';
+      return;
+    }
+    var h = "";
+    arr.forEach(function(item){
+      h += '<div class="hist-item">' +
+        '<div class="h-top"><span class="h-name">' + esc(item.name || "(未命名)") + '</span>' +
+        '<span class="h-ts">' + fmtTime(item.ts) + '</span></div>' +
+        '<div class="h-meta">' + esc(item.type || "") + ' · 模板「' + esc(item.profileName || item.profile || "") + '」' +
+        (item.files ? ' · ' + item.files + ' 文件' : '') +
+        (item.phaseTotal ? ' · ' + item.phaseDone + '/' + item.phaseTotal + ' 阶段' : '') +
+        '</div>' +
+        '<div class="h-acts">' +
+          '<button class="btn-text" data-hact="view" data-hid="' + item.id + '">回看</button>' +
+          '<button class="btn-text danger" data-hact="del" data-hid="' + item.id + '">删除</button>' +
+        '</div>' +
+      '</div>';
+    });
+    list.innerHTML = h;
+  }
+
+  function openHistory(){
+    renderHistoryList();
+    document.getElementById("historyDrawer").className = "drawer";
+  }
+  function closeHistory(){
+    document.getElementById("historyDrawer").className = "drawer hidden";
+  }
+  function viewHistory(id){
+    var arr = listHistory();
+    var item = null;
+    for (var i = 0; i < arr.length; i++){ if (arr[i].id === id) { item = arr[i]; break; } }
+    var body = document.getElementById("histDetailBody");
+    if (!body) return;
+    if (!item){
+      body.innerHTML = '<div class="empty">找不到这条记录（可能已被删除）。</div>';
+    } else {
+      var rows = [
+        ["时间", fmtTime(item.ts)],
+        ["项目名", item.name || "(未命名)"],
+        ["根目录", item.root || "—"],
+        ["文件数", item.files || 0],
+        ["技术类型", item.type || "—"],
+        ["自动识别", item.auto || "—"],
+        ["使用模板", (item.profileName || item.profile || "—") + "（" + (item.profile || "") + "）"],
+        ["阶段完成", item.phaseDone + " / " + item.phaseTotal],
+        ["产物齐全", item.artifactDone + " / " + item.artifactTotal],
+        ["来源", item.label ? ("项目 " + item.label) : "—"],
+        ["是否截断", item.truncated ? "是（文件数超限）" : "否"]
+      ];
+      var h = "";
+      rows.forEach(function(r){
+        h += '<div class="mb-row"><div class="mb-k">' + esc(r[0]) + '</div><div class="mb-v">' + esc(String(r[1])) + '</div></div>';
+      });
+      body.innerHTML = h;
+    }
+    document.getElementById("histDetail").className = "modal";
+  }
+  function closeDetail(){
+    document.getElementById("histDetail").className = "modal hidden";
+  }
+
+  // —— 绑定 + 初始化（script 在 body 末尾，DOM 已就绪）——
+  (function bindHistoryUI(){
+    var b;
+    b = document.getElementById("btnHistory");    if (b) b.onclick = openHistory;
+    b = document.getElementById("btnCloseHist"); if (b) b.onclick = closeHistory;
+    b = document.getElementById("btnCloseDetail"); if (b) b.onclick = closeDetail;
+    b = document.getElementById("btnClearHist");
+    if (b) b.onclick = function(){
+      clearHistory();
+      renderHistoryList();
+      updateHistoryBadge();
+      toast("已清空历史记录");
+    };
+    var hl = document.getElementById("histList");
+    if (hl) hl.addEventListener("click", function(e){
+      var t = e.target;
+      if (!t || !t.dataset || !t.dataset.hact) return;
+      var act = t.dataset.hact, hid = Number(t.dataset.hid);
+      if (act === "view") viewHistory(hid);
+      else if (act === "del"){
+        deleteHistory(hid);
+        renderHistoryList();
+        updateHistoryBadge();
+      }
+    });
+    updateHistoryBadge();
+  })();
+
   function onLoaded(which, data, slot){
     if (!data){ slot.textContent = "这个目录没有可分析的文件"; slot.className = "slot"; return; }
     if (which === "A") A = data; else B = data;
     updateSlots();
+    saveHistory(data);
+    updateHistoryBadge();
     if (which === "B" && A) setMode("compare");
     else render();
   }
@@ -2819,7 +3059,12 @@
     _setSel: function(label, arr){ SEL[label] = arr; },
     detectPhases: detectPhases, detectArtifacts: detectArtifacts,
     detectEngineering: detectEngineering, genIntro: genIntro, inferModules: inferModules,
-    PROFILES: PROFILES, getProfile: getProfile
+    PROFILES: PROFILES, getProfile: getProfile,
+    // P2 方向 1：历史快照留存钩子（供测试与诊断调用）
+    HISTORY_KEY: HISTORY_KEY, MAX_HISTORY: MAX_HISTORY, HAS_LS: HAS_LS,
+    saveHistory: saveHistory, listHistory: listHistory,
+    deleteHistory: deleteHistory, clearHistory: clearHistory,
+    snapshotFromData: snapshotFromData, updateHistoryBadge: updateHistoryBadge
   };
   render();
 })();

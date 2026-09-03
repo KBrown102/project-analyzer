@@ -806,6 +806,81 @@ for (const [name, { tree, a, b, expect: exp }] of Object.entries(ORDER)) {
   C.eq(`${name}：裁决为 ${exp}（PRIORITY 高者赢）`, d.profile, exp);
 }
 
+// ── [18] 历史快照留存钩子（P2 方向 1）─────────────────────────
+console.log("\n[18] 历史快照留存钩子");
+(function () {
+  api.clearHistory(); // setup：清空，避免被前面段污染
+
+  function fakeData(name, type, profile) {
+    return {
+      label: "A", root: name, name: name, files: 42, dirs: 5, exts: [],
+      profile: profile, profileName: profile.toUpperCase(), profileTag: "",
+      auto: profile, type: type, source: "browser", truncated: false,
+      boundary: null,
+      phases: { list: [{ done: true }, { done: false }, { done: true }] }, // 2/3
+      artifacts: [{ has: true }, { has: false }, { has: true }, { has: true }], // 3/4
+      eng: [], has: {}, intro: "", advice: ""
+    };
+  }
+
+  // 1. __PA 暴露齐全
+  C.ok("HISTORY_KEY 暴露为非空字符串", typeof api.HISTORY_KEY === "string" && api.HISTORY_KEY.length > 0);
+  C.ok("MAX_HISTORY=20", api.MAX_HISTORY === 20);
+  C.ok("HAS_LS=true（harness 已注入 localStorage mock）", api.HAS_LS === true);
+  ["saveHistory", "listHistory", "deleteHistory", "clearHistory", "snapshotFromData", "updateHistoryBadge"]
+    .forEach((fn) => C.ok(fn + " 是函数", typeof api[fn] === "function"));
+
+  // 2. 存档后能查到 + 摘要字段齐全
+  api.clearHistory();
+  var snap = api.saveHistory(fakeData("proj-a", "node", "web"));
+  C.ok("saveHistory 返回快照对象", snap && typeof snap === "object");
+  C.ok("快照 id 是数字", typeof snap.id === "number");
+  C.ok("快照 ts 是字符串", typeof snap.ts === "string" && /\d/.test(snap.ts));
+  var arr1 = api.listHistory();
+  C.ok("存档后 listHistory 长度=1", arr1.length === 1, "实际 " + arr1.length);
+  C.ok("快照 name=proj-a", arr1[0].name === "proj-a");
+  C.ok("快照 files=42", arr1[0].files === 42);
+  C.ok("快照 type=node", arr1[0].type === "node");
+  C.ok("快照 profile=web", arr1[0].profile === "web");
+  C.ok("快照 phaseDone/Total=2/3", arr1[0].phaseDone === 2 && arr1[0].phaseTotal === 3);
+  C.ok("快照 artifactDone/Total=3/4", arr1[0].artifactDone === 3 && arr1[0].artifactTotal === 4);
+  C.ok("快照 truncated=false", arr1[0].truncated === false);
+
+  // 3. 容量管理：超 20 滚动删最旧
+  api.clearHistory();
+  for (var i = 0; i < 25; i++) { api.saveHistory(fakeData("p" + i, "node", "lib")); }
+  var arr2 = api.listHistory();
+  C.ok("存 25 条后 listHistory 长度=20（滚动删最旧）", arr2.length === 20, "实际 " + arr2.length);
+  C.ok("最新是 p24（unshift 在头）", arr2[0].name === "p24", "实际最新 " + arr2[0].name);
+  C.ok("最旧保留的是 p5（p0~p4 被滚删）", arr2[arr2.length - 1].name === "p5", "实际最旧 " + arr2[arr2.length - 1].name);
+
+  // 4. 删除单条
+  api.clearHistory();
+  api.saveHistory(fakeData("keep", "node", "lib"));
+  var toDel = api.saveHistory(fakeData("delme", "node", "lib"));
+  api.deleteHistory(toDel.id);
+  var arr3 = api.listHistory();
+  C.ok("删除后剩 1 条", arr3.length === 1, "实际 " + arr3.length);
+  C.ok("删除后保留的是 keep", arr3[0].name === "keep");
+
+  // 5. 清空全部
+  api.saveHistory(fakeData("x", "node", "lib"));
+  api.clearHistory();
+  C.ok("清空后 listHistory 为空", api.listHistory().length === 0);
+
+  // 6. 降级：data 无效不存
+  api.clearHistory();
+  var r = api.saveHistory(null);
+  C.ok("data=null 时 saveHistory 返回 null", r === null);
+  C.ok("data=null 不产生存档", api.listHistory().length === 0);
+
+  // 7. 容错：data 缺 phases/artifacts 也不崩
+  var snap2 = api.saveHistory({ label: "A", root: "r", name: "r", files: 1, type: "t", auto: "x", profile: "x", profileName: "X" });
+  C.ok("缺 phases/artifacts 的 data 也能存档", snap2 && snap2.phaseTotal === 0 && snap2.artifactTotal === 0);
+
+  api.clearHistory(); // teardown
+})();
+
 // ── 汇总 ───────────────────────────────────────────────────────
 console.log(`\n通过 ${C.state.pass} 项，失败 ${C.state.fail} 项`);
 if (C.state.fail > 0) {
