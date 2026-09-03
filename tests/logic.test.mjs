@@ -942,6 +942,126 @@ console.log("\n[19] JSON 导出");
   C.ok("完整结构 payload 保留 boundary", p3.boundary && p3.boundary.count === 1);
 })();
 
+// ── [20] AI 辅助分析 · 每步校验（P3）────────────────────────────
+console.log("\n[20] AI 辅助分析 · 每步校验");
+(function(){
+  // 构造测试用 data 对象
+  var td = {
+    name: "test-proj", files: 10, type: "JavaScript",
+    profile: "mini", profileName: "小游戏/工具", label: "A",
+    phases: { list: [{id:"P0",name:"立项",done:true,evidence:"README"},{id:"P1",name:"设计",done:false}], cur: -1 },
+    artifacts: [{key:"readme",label:"README",has:true,count:1},{key:"design",label:"设计文档",has:false,count:0}],
+    eng: { ci: false, test: false, readme: true }
+  };
+
+  // 1. buildDataSummary 摘要字段齐全
+  var sum = api.buildDataSummary(td);
+  var sumObj = JSON.parse(sum);
+  C.ok("buildDataSummary 返回合法 JSON", typeof sumObj === "object");
+  C.ok("摘要含 name", sumObj.name === "test-proj");
+  C.ok("摘要含 files", sumObj.files === 10);
+  C.ok("摘要含 profile", sumObj.profile === "mini");
+  C.ok("摘要含 phaseDone/Total", sumObj.phaseDone === 1 && sumObj.phaseTotal === 2);
+  C.ok("摘要含 artifactDone/Total", sumObj.artifactDone === 1 && sumObj.artifactTotal === 2);
+  C.ok("摘要含 eng", sumObj.eng && sumObj.eng.readme === true);
+
+  // 2. findStep 能找到 phase/artifact
+  var p0 = api.findStep(td, "phase", "P0");
+  C.ok("findStep 找到 phase P0", p0 && p0.name === "立项");
+  var pMiss = api.findStep(td, "phase", "P9");
+  C.ok("findStep 找不到的 phase 返回 null", pMiss === null);
+  var art = api.findStep(td, "artifact", "readme");
+  C.ok("findStep 找到 artifact readme", art && art.has === true);
+  var artMiss = api.findStep(td, "artifact", "nope");
+  C.ok("findStep 找不到的 artifact 返回 null", artMiss === null);
+
+  // 3. loadPrompt 占位符注入
+  var rules = api.loadPrompt("rules");
+  C.ok("loadPrompt(rules) 返回非空", typeof rules === "string" && rules.length > 0);
+  var stepP = api.loadPrompt("step-check", { stepType: "phase", stepId: "P0", dataSummary: sum });
+  C.ok("loadPrompt(step-check) 注入 stepType", stepP.indexOf("phase") >= 0);
+  C.ok("loadPrompt(step-check) 注入 stepId", stepP.indexOf("P0") >= 0);
+  C.ok("loadPrompt(step-check) 注入 dataSummary", stepP.indexOf("test-proj") >= 0);
+  C.ok("loadPrompt(step-check) 无残留占位符", stepP.indexOf("{{") < 0);
+  var sumP = api.loadPrompt("summary", { fullData: '{"name":"x"}' });
+  C.ok("loadPrompt(summary) 注入 fullData", sumP.indexOf('"name":"x"') >= 0);
+  C.ok("loadPrompt(summary) 无残留占位符", sumP.indexOf("{{") < 0);
+
+  // 4. parseAIJSON strip 围栏 + 兜底
+  var j1 = api.parseAIJSON('{"accuracy":"high","reason":"ok","canIgnore":true}');
+  C.ok("parseAIJSON 解析纯 JSON", j1 && j1.accuracy === "high");
+  var j2 = api.parseAIJSON('```json\n{"accuracy":"low","reason":"bad","canIgnore":false}\n```');
+  C.ok("parseAIJSON strip json 围栏", j2 && j2.accuracy === "low");
+  var j3 = api.parseAIJSON('```\n{"accuracy":"medium"}\n```');
+  C.ok("parseAIJSON strip 无 lang 围栏", j3 && j3.accuracy === "medium");
+  var j4 = api.parseAIJSON("不是JSON");
+  C.ok("parseAIJSON 非法 JSON 返回 null", j4 === null);
+  var j5 = api.parseAIJSON("");
+  C.ok("parseAIJSON 空字符串返回 null", j5 === null);
+
+  // 5. callAI 错误降级（AI 未启用 → 返回 Promise，不抛错）
+  var cfg = api.loadAIConfig();
+  C.ok("AI 默认未启用", cfg.enabled === false);
+  var p = api.callAI([{ role: "user", content: "ping" }]);
+  C.ok("callAI 返回 Promise", p && typeof p.then === "function");
+  C.ok("callAI 未启用时不抛错（返回 resolved Promise）", !(p instanceof Error));
+})();
+
+// ── [21] AI 记忆留存（P3）────────────────────────────────────────
+console.log("\n[21] AI 记忆留存");
+(function(){
+  // 清空后开始
+  api.clearAIMemory();
+  C.ok("clearAIMemory 不抛错", true);
+
+  // 写入一条
+  api.saveAIMemory({ project: "proj-A", stepType: "phase", stepId: "P0",
+    accuracy: "high", reason: "判定正确", canIgnore: false, suggestion: "" });
+  var list1 = api.listAIMemory();
+  C.ok("saveAIMemory 后 listAIMemory 能查到", list1.length === 1);
+  C.ok("记忆含 project", list1[0].project === "proj-A");
+  C.ok("记忆含 stepType", list1[0].stepType === "phase");
+  C.ok("记忆含 stepId", list1[0].stepId === "P0");
+  C.ok("记忆含 accuracy", list1[0].accuracy === "high");
+  C.ok("记忆含 reason", list1[0].reason === "判定正确");
+  C.ok("记忆含 canIgnore 布尔", list1[0].canIgnore === false);
+  C.ok("记忆含 ts", typeof list1[0].ts === "string");
+  C.ok("记忆含 id 数字", typeof list1[0].id === "number");
+
+  // 写入第二条（不同项目）
+  api.saveAIMemory({ project: "proj-B", stepType: "summary", stepId: "summary",
+    accuracy: "medium", reason: "信息不足", canIgnore: true, suggestion: "补 README" });
+
+  // 容量滚动：写超过 MAX_AI_MEMORY 条，验证只保留最近 50
+  for (var i = 0; i < 55; i++){
+    api.saveAIMemory({ project: "overflow-" + i, stepType: "artifact", stepId: "k" + i,
+      accuracy: "low", reason: "r" + i, canIgnore: true });
+  }
+  var list2 = api.listAIMemory();
+  C.ok("超 50 条后容量滚动删最旧", list2.length === api.MAX_AI_MEMORY);
+  C.ok("滚动后最新条目是 overflow-54", list2[0].project === "overflow-54");
+  C.ok("滚动后最旧条目是 overflow-5（删了 0-4）", list2[list2.length-1].project === "overflow-5");
+
+  // exportAIMemory 格式
+  api.clearAIMemory();
+  api.saveAIMemory({ project: "proj-X", stepType: "phase", stepId: "P1",
+    accuracy: "medium", reason: "边界", canIgnore: false, suggestion: "加测试" });
+  var md = api.exportAIMemory();
+  C.ok("exportAIMemory 返回 .md 字符串", typeof md === "string" && md.indexOf("# AI") === 0);
+  C.ok("导出含项目分组标题", md.indexOf("## 项目：proj-X") >= 0);
+  C.ok("导出含 stepType", md.indexOf("[phase]") >= 0);
+  C.ok("导出含准确性", md.indexOf("准确性：medium") >= 0);
+  C.ok("导出含理由", md.indexOf("边界") >= 0);
+  C.ok("导出含可忽略", md.indexOf("可忽略：否") >= 0);
+
+  // 空记忆导出
+  api.clearAIMemory();
+  var emptyMd = api.exportAIMemory();
+  C.ok("空记忆导出含提示", emptyMd.indexOf("暂无记录") >= 0);
+
+  api.clearAIMemory();
+})();
+
 // ── 汇总 ───────────────────────────────────────────────────────
 console.log(`\n通过 ${C.state.pass} 项，失败 ${C.state.fail} 项`);
 if (C.state.fail > 0) {

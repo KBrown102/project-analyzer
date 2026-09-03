@@ -154,7 +154,8 @@
   .ai-cfg-row input[type=text],.ai-cfg-row input[type=password]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;background:var(--bg2);color:var(--tx)}
   .ai-cfg-row input[type=checkbox]{margin-right:6px}
   #btnAISettings.ai-on{border-color:var(--ok);color:var(--ok)}
-  .ai-check{display:inline-block;background:transparent;border:1px solid var(--line);color:var(--tx3);padding:1px 6px;border-radius:4px;font-size:11px;cursor:pointer;margin-left:6px;vertical-align:middle}
+  .ai-check{display:none;background:transparent;border:1px solid var(--line);color:var(--tx3);padding:1px 6px;border-radius:4px;font-size:11px;cursor:pointer;margin-left:6px;vertical-align:middle}
+  body.ai-enabled .ai-check{display:inline-block}
   .ai-check:hover{border-color:var(--accent);color:var(--accent)}
   .ai-result{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;background:var(--bg2)}
   .ai-result .ai-acc{font-weight:600;font-size:12px;padding:1px 6px;border-radius:4px}
@@ -2484,7 +2485,8 @@
     h += '<h3>阶段进度（' + esc(d.profileName) + ' · ' + esc(d.profileTag) + '）</h3><div class="phases">';
     d.phases.list.forEach(function(p){
       var cls = p.done ? "done" : (p.cur ? "cur" : "");
-      h += '<div class="ph"><div class="phbox ' + cls + '" title="' + (p.evidence ? esc(p.evidence) : "无证据") + '">' + p.id + '</div><div class="phlbl">' + p.name + '</div></div>';
+      h += '<div class="ph"><div class="phbox ' + cls + '" title="' + (p.evidence ? esc(p.evidence) : "无证据") + '">' + p.id + '</div><div class="phlbl">' + p.name + '</div>' +
+           '<button class="ai-check" data-act="ai-check" data-stype="phase" data-sid="' + esc(p.id) + '" data-label="' + d.label + '" title="AI 校验此阶段判定">AI 校验</button></div>';
     });
     h += '</div>';
     var total = d.phases.list.length;
@@ -2498,7 +2500,8 @@
     h += '<h3>产物清点</h3>';
     d.artifacts.forEach(function(a){
       h += '<div class="row"><i class="dot ' + (a.has ? "ok" : "no") + '"></i><span class="n">' + a.label + '</span>' +
-           '<span class="v">' + (a.has ? (a.count > 1 ? a.count + " 处" : "有") : "缺") + '</span></div>';
+           '<span class="v">' + (a.has ? (a.count > 1 ? a.count + " 处" : "有") : "缺") + '</span>' +
+           '<button class="ai-check" data-act="ai-check" data-stype="artifact" data-sid="' + esc(a.key) + '" data-label="' + d.label + '" title="AI 校验此产物判定">AI 校验</button></div>';
     });
 
     h += '<h3>工程化</h3>';
@@ -3186,6 +3189,95 @@
     var cfg = loadAIConfig();
     btn.className = cfg.enabled ? "ai-on" : "";
     btn.textContent = "AI 设置" + (cfg.enabled ? " ●" : "");
+    // 控制 body.ai-enabled → 显示所有 .ai-check 按钮
+    try {
+      if (document.body) {
+        var cn = document.body.className || "";
+        if (cfg.enabled) {
+          if (cn.indexOf("ai-enabled") < 0) document.body.className = cn ? cn + " ai-enabled" : "ai-enabled";
+        } else {
+          document.body.className = cn.replace(/\bai-enabled\b\s*/g, "").trim();
+        }
+      }
+    } catch (e) { /* 测试环境无 body */ }
+  }
+
+  // —— 每步校验（P3 批 2）——
+  function buildDataSummary(d){
+    var phDone = 0;
+    for (var i = 0; i < d.phases.list.length; i++){ if (d.phases.list[i].done) phDone++; }
+    var artDone = 0;
+    for (var j = 0; j < d.artifacts.length; j++){ if (d.artifacts[j].has) artDone++; }
+    return JSON.stringify({
+      name: d.name, files: d.files, type: d.type,
+      profile: d.profile, profileName: d.profileName,
+      phaseDone: phDone, phaseTotal: d.phases.list.length,
+      artifactDone: artDone, artifactTotal: d.artifacts.length,
+      eng: { ci: d.eng.ci, test: d.eng.test, readme: d.eng.readme }
+    });
+  }
+
+  function findStep(d, stepType, stepId){
+    if (stepType === "phase"){
+      for (var i = 0; i < d.phases.list.length; i++){
+        if (d.phases.list[i].id === stepId) return d.phases.list[i];
+      }
+    } else if (stepType === "artifact"){
+      for (var j = 0; j < d.artifacts.length; j++){
+        if (d.artifacts[j].key === stepId) return d.artifacts[j];
+      }
+    }
+    return null;
+  }
+
+  function showAIResult(label, stepType, stepId, result){
+    var btn = document.querySelector('[data-act="ai-check"][data-stype="' + stepType + '"][data-sid="' + stepId + '"][data-label="' + label + '"]');
+    if (!btn) return;
+    var parent = btn.parentElement;
+    var old = parent.querySelector(".ai-result");
+    if (old) parent.removeChild(old);
+    var accText = result.accuracy === "high" ? "高" : (result.accuracy === "medium" ? "中" : (result.accuracy === "low" ? "低" : "未知"));
+    var h = '<div class="ai-result"><span class="ai-acc ' + esc(result.accuracy || "medium") + '">准确性：' + accText + '</span>' +
+            '<div class="ai-reason">理由：' + esc(result.reason || "") + '</div>';
+    if (result.suggestion) h += '<div class="ai-sugg">建议：' + esc(result.suggestion) + '</div>';
+    h += '<label><input type="checkbox" data-act="ai-ignore" data-label="' + label + '" data-stype="' + stepType + '" data-sid="' + stepId + '"' + (result.canIgnore ? ' checked' : '') + '> 忽略此条建议</label></div>';
+    parent.insertAdjacentHTML("beforeend", h);
+  }
+
+  function aiCheckStep(label, stepType, stepId){
+    var d = (label === "A") ? A : B;
+    if (!d){ toast("请先选择项目"); return; }
+    var cfg = loadAIConfig();
+    if (!cfg.enabled){ toast("请先在 AI 设置里启用"); openAISettings(); return; }
+    var step = findStep(d, stepType, stepId);
+    var stepInfo = "";
+    if (step){
+      if (stepType === "phase"){
+        stepInfo = "阶段 " + step.id + "：" + step.name + "，" + (step.done ? "已完成" : "未完成") + "，证据：" + (step.evidence || "无");
+      } else {
+        stepInfo = "产物 " + step.label + "，" + (step.has ? "存在" + (step.count > 1 ? "（" + step.count + " 处）" : "") : "缺失");
+      }
+    }
+    var dataSummary = buildDataSummary(d) + "\n\n当前校验项：\n" + stepInfo;
+    var rules = loadPrompt("rules");
+    var prompt = loadPrompt("step-check", { stepType: stepType, stepId: stepId, dataSummary: dataSummary });
+    var btn = document.querySelector('[data-act="ai-check"][data-stype="' + stepType + '"][data-sid="' + stepId + '"][data-label="' + label + '"]');
+    if (btn){ btn.disabled = true; btn.textContent = "校验中…"; }
+    callAI([{ role: "system", content: rules }, { role: "user", content: prompt }]).then(function(r){
+      if (btn){ btn.disabled = false; btn.textContent = "AI 校验"; }
+      if (!r.ok){ toast("AI 校验失败：" + r.error); return; }
+      var parsed = parseAIJSON(r.data);
+      if (!parsed){
+        showAIResult(label, stepType, stepId, { accuracy: "medium", reason: "AI 返回格式异常，原文：\n" + r.data, canIgnore: true, suggestion: "" });
+        return;
+      }
+      showAIResult(label, stepType, stepId, parsed);
+      saveAIMemory({
+        project: d.name, stepType: stepType, stepId: stepId,
+        accuracy: parsed.accuracy || "", reason: parsed.reason || "",
+        canIgnore: !!parsed.canIgnore, suggestion: parsed.suggestion || ""
+      });
+    });
   }
 
   // —— 绑定 + 初始化（script 在 body 末尾，DOM 已就绪）——
@@ -3233,6 +3325,15 @@
       clearAIMemory();
       toast("已清空 AI 记忆");
     };
+    // 事件委托：每步校验按钮（动态渲染，用委托绑定）
+    var out = document.getElementById("out");
+    if (out) out.addEventListener("click", function(e){
+      var t = e.target;
+      if (!t || !t.dataset || !t.dataset.act) return;
+      if (t.dataset.act === "ai-check"){
+        aiCheckStep(t.dataset.label, t.dataset.stype, t.dataset.sid);
+      }
+    });
     updateAIBadge();
   })();
 
@@ -3422,7 +3523,8 @@
     saveAIMemory: saveAIMemory, listAIMemory: listAIMemory,
     clearAIMemory: clearAIMemory, exportAIMemory: exportAIMemory,
     AI_CONFIG_DEFAULTS: AI_CONFIG_DEFAULTS, MAX_AI_MEMORY: MAX_AI_MEMORY,
-    AI_HAS_LS: AI_HAS_LS, AI_FALLBACK_PROMPTS: AI_FALLBACK_PROMPTS
+    AI_HAS_LS: AI_HAS_LS, AI_FALLBACK_PROMPTS: AI_FALLBACK_PROMPTS,
+    buildDataSummary: buildDataSummary, findStep: findStep
   };
   render();
 })();
