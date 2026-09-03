@@ -881,6 +881,67 @@ console.log("\n[18] 历史快照留存钩子");
   api.clearHistory(); // teardown
 })();
 
+// ── [19] JSON 导出（P2 方向 3）──────────────────────────────────
+console.log("\n[19] JSON 导出");
+(function () {
+  function fakeData(label, name) {
+    return {
+      label: label, root: name, name: name, scope: null, files: 10, dirs: 3, exts: [[".js", 5]],
+      profile: "web", profileName: "Web", profileTag: "", auto: "web", type: "node",
+      source: "browser", truncated: false, boundary: null,
+      phases: { list: [{ done: true, name: "p1" }, { done: false, name: "p2" }] },
+      artifacts: [{ key: "A", has: true }, { key: "B", has: false }],
+      eng: { ci: true, test: false, pkg: true, scripts: [] },
+      has: { A: true, B: false }, intro: "项目介绍", advice: [{ pri: "P0", tag: "基础", title: "x", detail: "y", why: "z" }]
+    };
+  }
+
+  C.ok("exportJSONData 暴露为函数", typeof api.exportJSONData === "function");
+
+  // 空项目（无参 → 读闭包 A/B=null）
+  C.ok("无项目时 exportJSONData() 返回 null", api.exportJSONData() === null);
+  C.ok("exportJSONData([]) 返回 null", api.exportJSONData([]) === null);
+
+  // 单项目
+  var r1 = api.exportJSONData([fakeData("A", "proj-x")]);
+  C.ok("单项目返回对象", r1 && typeof r1 === "object");
+  C.ok("单项目 mode=single", r1.mode === "single");
+  C.ok("单项目 count=1", r1.count === 1);
+  C.ok("单项目 json 是非空字符串", typeof r1.json === "string" && r1.json.length > 0);
+  C.ok("单项目 name 含 .json", /\.json$/.test(r1.name));
+  C.ok("单项目 name 含项目名", r1.name.indexOf("proj-x") >= 0);
+  var p1 = JSON.parse(r1.json);
+  C.ok("单项目 payload 是 data 对象（无 projects 包装）", p1.name === "proj-x" && !p1.projects);
+  C.ok("单项目 payload 保留 files", p1.files === 10);
+  C.ok("单项目 payload 保留 type", p1.type === "node");
+  C.ok("单项目 payload 保留 profile", p1.profile === "web");
+  C.ok("单项目 payload 保留 phases.list", Array.isArray(p1.phases.list) && p1.phases.list.length === 2);
+  C.ok("单项目 payload 保留 artifacts", Array.isArray(p1.artifacts) && p1.artifacts.length === 2);
+  C.ok("单项目 payload 保留 eng.ci", p1.eng.ci === true);
+  C.ok("单项目 payload 保留 advice", Array.isArray(p1.advice) && p1.advice[0].pri === "P0");
+  C.ok("单项目 payload 保留 intro", p1.intro === "项目介绍");
+
+  // 对比模式
+  var r2 = api.exportJSONData([fakeData("A", "a"), fakeData("B", "b")]);
+  C.ok("对比模式 mode=compare", r2.mode === "compare");
+  C.ok("对比模式 count=2", r2.count === 2);
+  C.ok("对比模式 name 含 -vs-", r2.name.indexOf("-vs-") >= 0);
+  var p2 = JSON.parse(r2.json);
+  C.ok("对比模式 payload 是 {projects,compare}", p2.projects && p2.compare === true);
+  C.ok("对比模式 projects 长度=2", Array.isArray(p2.projects) && p2.projects.length === 2);
+  C.ok("对比模式 projects[0].name=a", p2.projects[0].name === "a");
+  C.ok("对比模式 projects[1].name=b", p2.projects[1].name === "b");
+
+  // 无循环引用（含 boundary/has 的完整结构）
+  var fullD = fakeData("A", "full");
+  fullD.boundary = { list: [{ name: "x", path: "x" }], count: 1 };
+  fullD.has = { A: true, B: false, C: true };
+  var r3 = api.exportJSONData([fullD]);
+  C.ok("含 boundary/has 的 data 也能序列化（无循环引用）", r3 && r3.json.length > 0);
+  var p3 = JSON.parse(r3.json);
+  C.ok("完整结构 payload 保留 boundary", p3.boundary && p3.boundary.count === 1);
+})();
+
 // ── 汇总 ───────────────────────────────────────────────────────
 console.log(`\n通过 ${C.state.pass} 项，失败 ${C.state.fail} 项`);
 if (C.state.fail > 0) {

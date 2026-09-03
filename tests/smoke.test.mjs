@@ -142,6 +142,14 @@ assert("onLoaded 接入了 saveHistory(data)", /saveHistory\(data\)/.test(html))
 assert("onLoaded 接入了 updateHistoryBadge()", /updateHistoryBadge\(\)/.test(html));
 assert("localStorage 降级守卫 HAS_LS", /HAS_LS/.test(html));
 
+// ---------- P2 方向 3：JSON 导出结构 ----------
+assert("exportJSONData 暴露为函数", typeof api.exportJSONData === "function");
+assert("exportJSON 函数已定义", /function exportJSON\(\)/.test(html));
+assert("exportJSONData 函数已定义", /function exportJSONData\(/.test(html));
+assert("顶部有导出 JSON 按钮 btnExportJSON", /id="btnExportJSON"/.test(html));
+assert("导出按钮已绑定 onclick", /getElementById\("btnExportJSON"\)/.test(html));
+assert("exportJSONData 已通过 __PA 暴露", typeof api.exportJSONData === "function");
+
 // ---------- 文档 ----------
 assert("README.md exists", fs.existsSync(path.join(root, "README.md")));
 

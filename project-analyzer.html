@@ -161,6 +161,7 @@
     <button id="btnB">选择项目 B（对比用）</button>
     <button id="btnClear">清空</button>
     <button id="btnHistory">历史</button>
+    <button id="btnExportJSON">导出 JSON</button>
     <div class="mode">
       <button id="mSingle" class="on">单项目</button>
       <button id="mCompare">对比</button>
@@ -2679,6 +2680,38 @@
     toast("已下载 " + name);
   }
 
+  // —— JSON 导出（P2 方向 3）：把分析结果序列化为 JSON 下载，可存档/分享/二次加工 ——
+  function exportJSONData(items){
+    items = items || [A, B].filter(Boolean);
+    if (!items.length) return null;
+    var payload = items.length === 1 ? items[0] : { projects: items, compare: true };
+    var ts = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    var fname = "pa-" + items.map(function(d){ return d.name; }).join("-vs-") + "-" + ts + ".json";
+    return {
+      name: fname,
+      json: JSON.stringify(payload, null, 2),
+      mode: items.length === 1 ? "single" : "compare",
+      count: items.length
+    };
+  }
+  function exportJSON(){
+    var r = exportJSONData();
+    if (!r) { toast("还没有可导出的项目"); return; }
+    var blob = new Blob([r.json], { type: "application/json;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = r.name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("已导出 " + r.count + " 个项目的 JSON");
+  }
+
+  // 绑定导出按钮（script 在 body 末尾，DOM 已就绪）
+  (function(){
+    var b = document.getElementById("btnExportJSON");
+    if (b) b.onclick = exportJSON;
+  })();
+
   function currentData(label){ return label === "A" ? A : B; }
 
   function refreshPrompt(label){
@@ -3064,7 +3097,9 @@
     HISTORY_KEY: HISTORY_KEY, MAX_HISTORY: MAX_HISTORY, HAS_LS: HAS_LS,
     saveHistory: saveHistory, listHistory: listHistory,
     deleteHistory: deleteHistory, clearHistory: clearHistory,
-    snapshotFromData: snapshotFromData, updateHistoryBadge: updateHistoryBadge
+    snapshotFromData: snapshotFromData, updateHistoryBadge: updateHistoryBadge,
+    // P2 方向 3：JSON 导出（供测试序列化逻辑，不含 Blob/URL 依赖）
+    exportJSONData: exportJSONData
   };
   render();
 })();
