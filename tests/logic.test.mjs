@@ -1062,6 +1062,66 @@ console.log("\n[21] AI 记忆留存");
   api.clearAIMemory();
 })();
 
+// ── [22] AI 整体总结端到端（P3 批 3）────────────────────────────
+console.log("\n[22] AI 整体总结端到端");
+(function(){
+  // 模拟 aiSummary 的 fullData 构造
+  var td = {
+    name: "demo-proj", files: 15, type: "JavaScript",
+    profile: "web", profileName: "Web 应用", label: "A",
+    phases: { list: [{id:"P0",name:"立项",done:true,evidence:"README"},{id:"P1",name:"设计",done:false}], cur: -1 },
+    artifacts: [{key:"readme",label:"README",has:true,count:1},{key:"design",label:"设计文档",has:false,count:0}],
+    eng: { ci: false, test: "jest", readme: true }
+  };
+  var fullData = JSON.stringify({
+    name: td.name, files: td.files, type: td.type,
+    profile: td.profile, profileName: td.profileName,
+    phases: td.phases.list.map(function(p){ return { id: p.id, name: p.name, done: p.done, evidence: p.evidence || "" }; }),
+    artifacts: td.artifacts.map(function(a){ return { label: a.label, key: a.key, has: a.has, count: a.count }; }),
+    eng: td.eng
+  });
+  C.ok("fullData 构造为合法 JSON", (function(){ try { JSON.parse(fullData); return true; } catch(e){ return false; } })());
+  var fd = JSON.parse(fullData);
+  C.ok("fullData 含 phases 数组", fd.phases && fd.phases.length === 2);
+  C.ok("fullData 含 artifacts 数组", fd.artifacts && fd.artifacts.length === 2);
+  C.ok("fullData 含 eng", fd.eng && fd.eng.test === "jest");
+
+  // loadPrompt("summary", {fullData}) 注入
+  var prompt = api.loadPrompt("summary", { fullData: fullData });
+  C.ok("loadPrompt(summary) 返回非空", prompt.length > 0);
+  C.ok("loadPrompt(summary) 注入 fullData", prompt.indexOf("demo-proj") >= 0);
+  C.ok("loadPrompt(summary) 无残留占位符", prompt.indexOf("{{") < 0);
+
+  // 模拟 AI 返回的整体总结 JSON，用 parseAIJSON 解析
+  var aiResp = '{"summary":"项目结构基本完整，阶段完成度 50%，建议补设计文档。","gaps":["设计文档缺失","无 CI 流水线"],"suggestions":["补充设计文档说明模块划分","加 CI 流水线自动化测试"]}';
+  var parsed = api.parseAIJSON(aiResp);
+  C.ok("parseAIJSON 解析整体总结", parsed !== null);
+  C.ok("整体总结含 summary", parsed.summary && parsed.summary.indexOf("项目结构") === 0);
+  C.ok("整体总结含 gaps 数组", parsed.gaps && parsed.gaps.length === 2);
+  C.ok("整体总结含 suggestions 数组", parsed.suggestions && parsed.suggestions.length === 2);
+
+  // 模拟 aiSummary 的记忆写入
+  api.clearAIMemory();
+  api.saveAIMemory({
+    project: td.name, stepType: "summary", stepId: "summary",
+    accuracy: "medium", reason: parsed.summary, canIgnore: false,
+    suggestion: parsed.gaps.concat(parsed.suggestions).join("；")
+  });
+  var mem = api.listAIMemory();
+  C.ok("整体总结记忆已写入", mem.length === 1);
+  C.ok("记忆 stepType=summary", mem[0].stepType === "summary");
+  C.ok("记忆 stepId=summary", mem[0].stepId === "summary");
+  C.ok("记忆 reason=summary 文本", mem[0].reason.indexOf("项目结构") === 0);
+  C.ok("记忆 suggestion 含 gaps+suggestions", mem[0].suggestion.indexOf("设计文档") >= 0 && mem[0].suggestion.indexOf("CI") >= 0);
+
+  // AI 返回带围栏的 JSON 也能解析
+  var fenced = '```json\n{"summary":"ok","gaps":[],"suggestions":[]}\n```';
+  var pf = api.parseAIJSON(fenced);
+  C.ok("parseAIJSON 解析带围栏的整体总结", pf !== null && pf.summary === "ok");
+
+  api.clearAIMemory();
+})();
+
 // ── 汇总 ───────────────────────────────────────────────────────
 console.log(`\n通过 ${C.state.pass} 项，失败 ${C.state.fail} 项`);
 if (C.state.fail > 0) {

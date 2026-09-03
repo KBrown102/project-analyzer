@@ -2482,7 +2482,7 @@
       h += '</div>';
     }
 
-    h += '<h3>阶段进度（' + esc(d.profileName) + ' · ' + esc(d.profileTag) + '）</h3><div class="phases">';
+    h += '<h3>阶段进度（' + esc(d.profileName) + ' · ' + esc(d.profileTag) + '）<button class="ai-check" data-act="ai-summary" data-label="' + d.label + '" style="float:right;font-size:11px;padding:2px 8px">AI 总结</button></h3><div class="phases">';
     d.phases.list.forEach(function(p){
       var cls = p.done ? "done" : (p.cur ? "cur" : "");
       h += '<div class="ph"><div class="phbox ' + cls + '" title="' + (p.evidence ? esc(p.evidence) : "无证据") + '">' + p.id + '</div><div class="phlbl">' + p.name + '</div>' +
@@ -3280,6 +3280,60 @@
     });
   }
 
+  function aiSummary(label){
+    var d = (label === "A") ? A : B;
+    if (!d){ toast("请先选择项目"); return; }
+    var cfg = loadAIConfig();
+    if (!cfg.enabled){ toast("请先在 AI 设置里启用"); openAISettings(); return; }
+    var fullData = JSON.stringify({
+      name: d.name, files: d.files, type: d.type,
+      profile: d.profile, profileName: d.profileName,
+      phases: d.phases.list.map(function(p){ return { id: p.id, name: p.name, done: p.done, evidence: p.evidence || "" }; }),
+      artifacts: d.artifacts.map(function(a){ return { label: a.label, key: a.key, has: a.has, count: a.count }; }),
+      eng: d.eng
+    });
+    var rules = loadPrompt("rules");
+    var prompt = loadPrompt("summary", { fullData: fullData });
+    var btn = document.querySelector('[data-act="ai-summary"][data-label="' + label + '"]');
+    if (btn){ btn.disabled = true; btn.textContent = "总结中…"; }
+    callAI([{ role: "system", content: rules }, { role: "user", content: prompt }]).then(function(r){
+      if (btn){ btn.disabled = false; btn.textContent = "AI 总结"; }
+      if (!r.ok){ toast("AI 总结失败：" + r.error); return; }
+      var parsed = parseAIJSON(r.data);
+      if (!parsed){
+        showAISummary(label, { summary: "AI 返回格式异常，原文：\n" + r.data, gaps: [], suggestions: [] });
+        return;
+      }
+      showAISummary(label, parsed);
+      saveAIMemory({
+        project: d.name, stepType: "summary", stepId: "summary",
+        accuracy: "medium", reason: parsed.summary || "", canIgnore: false,
+        suggestion: ((parsed.gaps || []).concat(parsed.suggestions || [])).join("；")
+      });
+    });
+  }
+
+  function showAISummary(label, result){
+    var btn = document.querySelector('[data-act="ai-summary"][data-label="' + label + '"]');
+    if (!btn) return;
+    var h3 = btn.parentElement;
+    var old = h3.parentNode.querySelector(".ai-summary-card");
+    if (old) h3.parentNode.removeChild(old);
+    var h = '<div class="ai-summary-card"><div class="ai-sum-text">' + esc(result.summary || "") + '</div>';
+    if (result.gaps && result.gaps.length){
+      h += '<div style="margin-top:8px;font-size:12px;color:var(--tx2)"><b>缺口：</b><ul class="ai-sum-list">';
+      for (var i = 0; i < result.gaps.length; i++) h += '<li>' + esc(result.gaps[i]) + '</li>';
+      h += '</ul></div>';
+    }
+    if (result.suggestions && result.suggestions.length){
+      h += '<div style="margin-top:8px;font-size:12px;color:var(--tx2)"><b>改进建议：</b><ul class="ai-sum-list">';
+      for (var j = 0; j < result.suggestions.length; j++) h += '<li>' + esc(result.suggestions[j]) + '</li>';
+      h += '</ul></div>';
+    }
+    h += '</div>';
+    h3.insertAdjacentHTML("afterend", h);
+  }
+
   // —— 绑定 + 初始化（script 在 body 末尾，DOM 已就绪）——
   (function bindHistoryUI(){
     var b;
@@ -3332,6 +3386,8 @@
       if (!t || !t.dataset || !t.dataset.act) return;
       if (t.dataset.act === "ai-check"){
         aiCheckStep(t.dataset.label, t.dataset.stype, t.dataset.sid);
+      } else if (t.dataset.act === "ai-summary"){
+        aiSummary(t.dataset.label);
       }
     });
     updateAIBadge();

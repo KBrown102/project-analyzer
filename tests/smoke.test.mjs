@@ -177,6 +177,10 @@ assert("prompts/ 目录存在", fs.existsSync(path.join(root, "prompts")));
 assert("step-check.md 含占位符 {{stepType}}", /{{stepType}}/.test(fs.readFileSync(path.join(root, "prompts", "step-check.md"), "utf8")));
 assert("step-check.md 含占位符 {{dataSummary}}", /{{dataSummary}}/.test(fs.readFileSync(path.join(root, "prompts", "step-check.md"), "utf8")));
 assert("summary.md 含占位符 {{fullData}}", /{{fullData}}/.test(fs.readFileSync(path.join(root, "prompts", "summary.md"), "utf8")));
+assert("aiSummary 函数已定义", /function\s+aiSummary\s*\(/.test(html));
+assert("showAISummary 函数已定义", /function\s+showAISummary\s*\(/.test(html));
+assert("AI 总结按钮 data-act=\"ai-summary\" 存在", /data-act="ai-summary"/.test(html));
+assert("ai-summary 事件委托已绑定", /t\.dataset\.act\s*===\s*"ai-summary"/.test(html));
 
 // ---------- 文档 ----------
 assert("README.md exists", fs.existsSync(path.join(root, "README.md")));
