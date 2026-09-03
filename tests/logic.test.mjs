@@ -701,6 +701,111 @@ console.log("\n[13] window.__PA 契约");
 C.eq("PROFILES 套数 = PROFILE_ORDER", Object.keys(api.PROFILES).length, PROFILE_ORDER.length);
 C.ok("getProfile 未知 id 回落 generic", api.getProfile("__nope__").id === "generic");
 
+// ── 17. 打分排序消除顺序依赖（7 组负向断言）────────────────────
+// 每组构造「同时触发两个模板信号」的 fixture，用 _detectProfileHits 佐证双方都达标(>=3)，
+// 再断言 PRIORITY 高的赢。这是 B1/B2 类 bug 的回归网：
+// SCORE_REGISTRY 顺序或 PRIORITY 一改坏就立刻报警。
+console.log("\n[17] 打分排序 · 顺序无关性（7 组负向）");
+
+// 从假目录重建 analyze 内部传给 detectProfile 的 (paths, texts, type)，供直接读命中表。
+// fixture 无噪声目录 → paths=全部键、texts=非空文本项，type 取 analyze 结果。
+function probe(tree, type) {
+  const paths = Object.keys(tree);
+  const texts = Object.keys(tree).filter((k) => tree[k] != null)
+    .map((k) => ({ path: k, text: String(tree[k]) }));
+  return api._detectProfileHits(paths, texts, type);
+}
+const hitScore = (hits, id) => (hits.find((h) => h.id === id) || { score: 0 }).score;
+
+const ORDER = {
+  "iac(16) vs devops(7)": {
+    // 刻意造同分=3：iac 用非具名 .tf（只 +3，不触发 main/variables 的 +1）；
+    // devops 用 ci+Dockerfile+deploy.sh（各 +1=3），且 deploy.sh 不含 kubectl 等关键词（否则文本 +1 变 4）。
+    // 同分时 iac 靠 PRIORITY 16 > devops 7 赢——这才是 PRIORITY 裁决的真考验。
+    tree: {
+      "infra/network.tf": 'resource "aws_vpc" "main" {}\n',
+      "infra/storage.tf": 'resource "aws_s3_bucket" "b" {}\n',
+      "infra/.github/workflows/ci.yml": "name: CI\non: [push]\n",
+      "infra/Dockerfile": "FROM node:18\n",
+      "infra/scripts/deploy.sh": "#!/usr/bin/env bash\necho deploy\n",
+      "infra/README.md": "# 基础设施\n",
+    },
+    a: "iac", b: "devops", expect: "iac",
+  },
+  "desktop(12) vs web(2)": {
+    tree: {
+      "app/package.json": JSON.stringify({ name: "note", main: "main.js", dependencies: { electron: "^28" } }),
+      "app/main.js": 'const { app, BrowserWindow } = require("electron");\n',
+      "app/pages/home.tsx": "export default ()=><div/>;\n",
+      "app/renderer/index.html": "<!DOCTYPE html><body>hi</body></html>\n",
+      "app/README.md": "# 桌面\n",
+    },
+    a: "desktop", b: "web", expect: "desktop",
+  },
+  "aiml(11) vs data(9)": {
+    tree: {
+      "ml/train.py": "import torch\nmodel = torch.nn.Linear(10,2)\n",
+      "ml/requirements.txt": "torch\ntorchvision\n",
+      "ml/checkpoints/best.pt": null,
+      "ml/dags/etl_dag.py": "from airflow import DAG\n",
+      "ml/warehouse/ods/raw.py": "rows=[]\n",
+      "ml/warehouse/dwd/dwd.py": "rows=[]\n",
+      "ml/README.md": "# ML\n",
+    },
+    a: "aiml", b: "data", expect: "aiml",
+  },
+  "microservice(10) vs server(8)": {
+    tree: {
+      "svc/api-gateway/index.js": "const express=require('express');\n",
+      "svc/services/user/package.json": JSON.stringify({ name: "user", dependencies: { express: "^4" } }),
+      "svc/services/user/src/server.js": "const express=require('express');\n",
+      "svc/services/order/package.json": JSON.stringify({ name: "order", dependencies: { express: "^4" } }),
+      "svc/services/order/src/server.js": "const express=require('express');\n",
+      "svc/proto/order.proto": "syntax='proto3';\n",
+      "svc/README.md": "# 微服务\n",
+    },
+    a: "microservice", b: "server", expect: "microservice",
+  },
+  "devops(7) vs tool(1) [B2 回归]": {
+    tree: {
+      "ops/.github/workflows/ci.yml": "name: CI\non: [push]\n",
+      "ops/Dockerfile": "FROM node:18\n",
+      "ops/scripts/deploy.sh": "#!/usr/bin/env bash\nkubectl apply -f k8s/\n",
+      "ops/k8s/deployment.yaml": "apiVersion: apps/v1\n",
+      "ops/README.md": "# 部署\n",
+    },
+    a: "devops", b: "tool", expect: "devops",
+  },
+  "game(100) vs tool(1)": {
+    tree: {
+      "mygame/project.godot": 'config_version=5\n[application]\nrun/main_scene="res://main.tscn"\n',
+      "mygame/README.md": "# 游戏\n",
+      "mygame/docs/arch.md": "# 架构\n",
+      "mygame/src/player.gd": "extends Node2D\n",
+    },
+    a: "game", b: "tool", expect: "game",
+  },
+  "cli(6) vs tool(1)": {
+    tree: {
+      "tool/package.json": JSON.stringify({ name: "r", bin: { r: "./cli.js" } }),
+      "tool/cli.js": "const {program}=require('commander');program.parse(process.argv);\n",
+      "tool/src/main.py": "import argparse\n",
+      "tool/run.sh": "#!/usr/bin/env bash\nnode cli.js\n",
+      "tool/README.md": "# CLI\n",
+    },
+    a: "cli", b: "tool", expect: "cli",
+  },
+};
+
+for (const [name, { tree, a, b, expect: exp }] of Object.entries(ORDER)) {
+  const d = await run(tree, "order-" + name.replace(/\W+/g, "-"));
+  const hits = probe(tree, d.type);
+  C.ok(`${name}：双方 ${a} 与 ${b} 都达标(>=3)`,
+    hitScore(hits, a) >= 3 && hitScore(hits, b) >= 3,
+    `${a}=${hitScore(hits, a)} ${b}=${hitScore(hits, b)}（必须双方都达标才算真考验）`);
+  C.eq(`${name}：裁决为 ${exp}（PRIORITY 高者赢）`, d.profile, exp);
+}
+
 // ── 汇总 ───────────────────────────────────────────────────────
 console.log(`\n通过 ${C.state.pass} 项，失败 ${C.state.fail} 项`);
 if (C.state.fail > 0) {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadAnalyzer } from "./_harness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -31,17 +32,32 @@ assert("has detectPhases()", html.includes("function detectPhases("));
 assert("has detectArtifacts()", html.includes("function detectArtifacts("));
 assert("has comparison mode", html.includes("compareMode") || html.includes("对比"));
 
-// ---------- 七套模板必须齐全 ----------
-const profiles = ["game", "web", "lib", "mini", "tool", "meta", "generic"];
+// ---------- 18 套模板动态齐全（读 PROFILE_ORDER，不再硬编码）----------
+const { api } = loadAnalyzer();
+const profiles = api.PROFILE_ORDER;
+assert("PROFILE_ORDER 含 18 套模板", profiles.length === 18, `实际 ${profiles.length}`);
 profiles.forEach((id) => {
-  assert(`profile ${id} defined`, new RegExp(`\\n\\s+${id}:\\s*\\{`).test(html));
-  assert(`profile ${id} listed in order`, html.includes(`"${id}"`));
+  assert(`profile ${id} 定义存在`, new RegExp(`\\n\\s+${id}:\\s*\\{`).test(html));
+  assert(`profile ${id} 在 PROFILE_ORDER 里`, html.includes(`"${id}"`));
+  const adviceFn = "advice" + id[0].toUpperCase() + id.slice(1);
+  assert(`${adviceFn}() 定义存在`, new RegExp(`function\\s+${adviceFn}\\s*\\(`).test(html));
 });
-const advises = [
-  "adviceGame", "adviceWeb", "adviceLib",
-  "adviceMini", "adviceTool", "adviceMeta", "adviceGeneric",
-];
-advises.forEach((fn) => assert(`${fn}() defined`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
+
+// ---------- P1 重构：打分注册表 + 正则集中管理 ----------
+assert("定义 SCORE_REGISTRY 打分注册表", /var\s+SCORE_REGISTRY\s*=/.test(html));
+assert("定义 PRIORITY 优先级裁决表", /var\s+PRIORITY\s*=/.test(html));
+assert("定义 REGEXES 集中管理对象", /var\s+REGEXES\s*=/.test(html));
+assert("有 checkRegexes 加载时自检", /function\s+checkRegexes/.test(html));
+assert("有 detectProfileHits 抽出（供测试佐证）", /function\s+detectProfileHits/.test(html));
+assert("detectProfile 遍历 SCORE_REGISTRY（非 if-else 链）", /SCORE_REGISTRY\.length/.test(html));
+assert("打分排序按 score 降序", /b\.score\s*-\s*a\.score/.test(html));
+assert("同分时按 priority 降序裁决", /b\.priority\s*-\s*a\.priority/.test(html));
+const scoreFns = ["gameScoreV2","metaScore","miniScore","toolScore","libScore","webScore","serverScoreV2"];
+scoreFns.forEach((fn) => assert(`${fn}() 定义存在`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
+assert("SCORE_REGISTRY 注册 17 个模板（generic 兜底不在表）", api.SCORE_REGISTRY.length === 17, `实际 ${api.SCORE_REGISTRY.length}`);
+assert("PRIORITY 表含 17 个优先级键", Object.keys(api.PRIORITY).length === 17, `实际 ${Object.keys(api.PRIORITY).length}`);
+assert("REGEXES 已通过 __PA 暴露", api.REGEXES && typeof api.REGEXES === "object");
+assert("_detectProfileHits 已通过 __PA 暴露", typeof api._detectProfileHits === "function");
 
 // 旧的单套流程不应残留
 assert("no legacy genAdvice", !/\bgenAdvice\b/.test(html));
@@ -91,7 +107,8 @@ function noiseWords(text, re) {
   return m[1].split("|").map((s) => s.trim()).filter(Boolean).sort();
 }
 // 注意：不能用 [^)]+ —— 列表里有 dist(-.*)? 这种自带括号的项，会提前截断
-const htmlNoise = noiseWords(html, /var NOISE = \/\(\^\|\\\/\)\((.+?)\)\(\\\/\|\$\)\//);
+// REGEXES.noise 已从 var NOISE 迁移到 REGEXES 对象属性
+const htmlNoise = noiseWords(html, /noise:\s*\/\(\^\|\\\/\)\((.+?)\)\(\\\/\|\$\)\//);
 const scannerNoise = noiseWords(
   fs.readFileSync(path.join(root, "build-electron", "scanner.js"), "utf-8"),
   /const NOISE_DIR = \/\^\((.+?)\)\$\//

@@ -162,11 +162,62 @@
 <script>
 (function(){
   "use strict";
-  // 噪音目录：浏览器版和 Electron 版（build-electron/scanner.js）各有一份，
-  // 两处必须完全一致，否则同一个目录两条路线会算出不同结果。
-  // tests/smoke.test.mjs 会核对这个列表，改这里记得同步改那边。
-  var NOISE = /(^|\/)(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release|\.cache|coverage|\.gradle|\.terraform|vendor)(\/|$)/;
-  var TEXT_RE = /\.(md|markdown|json|ya?ml|txt|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i;
+  // —— 正则集中管理：所有正则字面量收入 REGEXES，防散落、防提前闭合 ——
+  // smoke.test.mjs 核对 REGEXES.noise 与 scanner.js 的噪音列表一致。
+  var REGEXES = {
+    // —— 顶层共享正则（原 var 常量）——
+    noise:    /(^|\/)(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release|\.cache|coverage|\.gradle|\.terraform|vendor)(\/|$)/,
+    textFile: /\.(md|markdown|json|ya?ml|txt|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i,
+    testDir:  /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\.|test-strategy/i,
+    ci:       /\.github\/workflows|gitlab-ci|\.gitlab-ci|azure-pipelines|Jenkinsfile/i,
+    readme:   /README/i,
+    src:      /\.(js|mjs|cjs|jsx|ts|tsx|py|java|kt|cs|rs|go|rb|php|c|cpp|h|lua|gd|swift)$/i,
+
+    // —— 通用工具正则（多个 score 函数 / detectProfile / detectType 共用）——
+    util: {
+      indexHtml:     /(^|\/)index\.html$/i,
+      packageJson:  /(^|\/)package\.json$/i,
+      mdFile:        /\.md$/i,
+      batSh:         /\.(bat|sh)$/i,
+      pagesViews:    /(^|\/)(pages|views|routes|public)\//i,
+      pagesViews3:   /(^|\/)(pages|views|routes)\//i,
+      componentsDir: /(^|\/)(components|styles|static)\//i,
+      srcDir:        /(^|\/)(src|lib|app|cmd|internal)\//i,
+      designDir:     /(^|\/)(gdd|design|production|art)\//i,
+      frontendExt:   /\.(tsx|jsx|vue|svelte)$/i,
+      singleHtml:    /(^|\/)[^/]+\.html$/,
+      htmlFile:      /\.html?$/i,
+      cssFile:       /\.css$/i,
+      jsFile:        /\.(js|mjs|cjs)$/i,
+      tsFile:        /\.tsx?$/i,
+      luaFile:       /\.lua$/i,
+      pyFile:        /\.py$/i,
+      javaFile:      /\.java$/i,
+      rsFile:        /\.rs$/i,
+      csFile:        /\.cs$/i,
+      gdFile:        /\.gd$/i,
+      godotProject:  /project\.godot$/,
+      loveConf:      /conf\.lua$/,
+      loveMain:      /main\.lua$/,
+      unityDir:      /ProjectSettings\//,
+      unityProj:     /\.unity$/,
+      unrealProj:   /\.uproject$/,
+      claudeDir:     /(^|\/)\.claude\//,
+      license:       /LICENSE/i,
+      changelog:     /CHANGELOG/i,
+      dockerfile:    /Dockerfile|docker-compose/i,
+      envExample:    /\.env\.(example|sample|template)/i,
+      requirements:  /requirements\.txt$|pyproject\.toml$|\.py$/,
+      android:       /AndroidManifest\.xml$|(^|\/)android\//i,
+      javaProj:      /\.java$|\.gradle$|pom\.xml$/,
+      rustProj:      /\.rs$|Cargo\.toml$/,
+      goMod:         /go\.mod$/,
+      csProj:        /\.csproj$|\.sln$/,
+      phpProj:       /composer\.json$|\.php$/,
+      rubyProj:      /Gemfile$|\.rb$/
+    }
+  };
+
   var MAX_TEXTS = 250, MAX_SIZE = 300 * 1024;
   // 浏览器版：浏览器会先把目录下所有文件枚举完才交给我们，数量太大时先提醒用户
   var WARN_FILES = 8000;    // 超过这个数给提示
@@ -179,35 +230,272 @@
   // 浏览器交给我们的原始文件数（过滤噪音之前），用于提示规模
   var RAW_COUNT = { A:0, B:0 };
 
-  var RE_TEST = /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\.|test-strategy/i;
-  var RE_CI   = /\.github\/workflows|gitlab-ci|\.gitlab-ci|azure-pipelines|Jenkinsfile/i;
-  var RE_DOC  = /README/i;
-  var RE_SRC  = /\.(js|mjs|cjs|jsx|ts|tsx|py|java|kt|cs|rs|go|rb|php|c|cpp|h|lua|gd|swift)$/i;
+  // —— 各模板专属正则（phases re / artifacts re / artifacts tre）——
+  // 从 PROFILES 内联正则提取而来，正则内容不变，仅改为引用。
+  REGEXES.game = {
+    phase_0: /STUDIO_OVERVIEW|诊断|audit|现状盘点|复盘/i,
+    phase_1: /concept|概念|pitch|立项/i,
+    phase_2: /gdd|系统设计/i,
+    phase_3: /architect|adr|架构|技术方案/i,
+    phase_4: /ux-spec|ux[_-]?design|art-bible|asset-spec|epics|预[制製]作|原型/i,
+    phase_5: /sprint|production\/|src\//i,
+    phase_6: /balance|perf|polish|打磨|优化报告|playtest/i,
+    phase_7: /release|changelog|launch|发布|部署/i,
+    art_gdd:  /design\/gdd\/.+\.md$|gdd/i,
+    art_adr:  /adr/i,
+    art_arch: /architect/i,
+    art_ux:   /ux-spec|ux[_-]?design/i,
+    art_art:  /art-bible|asset-spec|art\//i,
+    art_plan: /sprint|epics|roadmap|计划/i
+  };
+  REGEXES.web = {
+    phase_0: /requirement|需求|prd|产品需求/i,
+    phase_1: /(^|\/)design\/|原型|wireframe|ui-spec|设计稿/i,
+    phase_2: /src\/|components?\/|pages?\/|views?\/|app\//i,
+    phase_3: /deploy|Dockerfile|vercel|netlify|nginx|workflows/i,
+    phase_4: /monitor|sentry|analytics|埋点|CHANGELOG|迭代/i,
+    art_env:    /\.env\.(example|sample)/i,
+    art_api:    /api\.(md|ya?ml|json)$|swagger|openapi/i,
+    art_style:  /style-guide|design-token|tailwind\.config|theme\./i,
+    art_deploy: /Dockerfile|docker-compose|vercel\.json|netlify\.toml|\.github\/workflows/i
+  };
+  REGEXES.server = {
+    phase_0: /(^|\/)(server|app|main|index|manage)\.(js|ts|py|go|rb|php)$|(^|\/)cmd\/[^/]+\.go$|(^|\/)(Application|Program)\.(java|cs)$/i,
+    phase_1: /(^|\/)(routes?|routers?|controllers?|handlers?|endpoints?|api)\//i,
+    phase_2: /(^|\/)(models?|entities?|repositor(y|ies)|dao|migrations?|prisma)\/|schema\.(prisma|sql)$|alembic/i,
+    phase_3: /\.env\.(example|sample|template)|application\.(yml|yaml|properties)|(^|\/)(config|conf|settings)\//i,
+    phase_4: /(^|\/)(tests?|spec)\/|(^|\/)(middleware|exceptions?|errors?|logger|logging)\//i,
+    phase_5: /Dockerfile|docker-compose|health|readiness|liveness|actuator|\.github\/workflows/i,
+    art_env:    /\.env\.(example|sample|template)/i,
+    art_config: /application\.(yml|yaml|properties|toml)|(^|\/)(config|conf|settings)\//i,
+    art_api:    /swagger|openapi|api\.(md|ya?ml|json)$|(^|\/)docs\/api/i,
+    art_migrate:/(^|\/)(migrations?|prisma)\/|schema\.(prisma|sql)$|alembic/i,
+    art_auth:   /(^|\/)(auth|guard|permission|security)\/|middleware/i,
+    art_err:    /(^|\/)(errors?|exceptions?)\/|error[_-]?handler/i,
+    art_log:    /(^|\/)(logs?|logger|logging)\/|winston|logrus|zap|log4j|loguru/i,
+    art_docker: /Dockerfile|docker-compose|\.dockerignore/i,
+    art_health: /health|readiness|liveness|actuator/i
+  };
+  REGEXES.lib = {
+    phase_0: /api|interface|\.d\.ts|类型定义/i,
+    phase_1: /src\/|lib\//i,
+    phase_2: /README|docs\/|\.md$/i,
+    phase_3: /example|demo|samples/i,
+    phase_4: /CHANGELOG|release|\.npmignore|publish/i,
+    art_license:    /LICENSE/i,
+    art_changelog:  /CHANGELOG/i,
+    art_api:        /api\.(md|ya?ml|json)$|docs\/api|typedoc|jsdoc/i,
+    art_type:       /\.d\.ts$|types\//i,
+    art_example:    /example|demo|samples/i
+  };
+  REGEXES.mini = {
+    phase_0: /(^|\/)index\.html$/i,
+    phase_3: /manifest\.json|README/i,
+    art_entry: /(^|\/)index\.html$/i,
+    tre_intro: /怎么玩|玩法|操作说明|点击.*开始|拖动/i,
+    tre_loop:  /gameover|gameOver|结算|结束页|再来一次|重新开始|result/i,
+    tre_self:  /https?:\/\/(cdn|unpkg|jsdelivr|cdnjs|fonts\.googleapis)/i,
+    tre_perf:  /requestAnimationFrame/i,
+    tre_resp:  /viewport|touchstart|pointerdown/i,
+    art_resp:  /viewport/i
+  };
+  REGEXES.tool = {
+    phase_0: /\.(html|js|mjs|cjs|py|sh|bat)$/i,
+    phase_1: /README|使用说明|用法|usage/i,
+    phase_2: /\.(bat|sh|exe)$|package\.json|Makefile/i,
+    art_usage:  /README|usage|使用说明|用法/i,
+    art_launch: /\.(bat|sh)$/i,
+    art_config: /config|配置|\.env/i
+  };
+  REGEXES.meta = {
+    phase_0: /README|OVERVIEW|总览|概览/i,
+    phase_1: /(^|\/)(rules|规范|约定)\/|结构约定|CONVENTIONS|约定文档/i,
+    phase_2: /(^|\/)(references|docs|knowledge|design|resources|sources)\//i,
+    phase_3: /(^|\/)(tools|scripts)\/|\.(cjs|mjs)$/i,
+    phase_4: /(^|\/)(tests|test)\/|audit|smoke|check|lint|校验/i,
+    art_overview: /OVERVIEW|总览|概览|PROJECT_OVERVIEW/i,
+    art_conv:     /约定|CONVENTIONS|(^|\/)rules\/|规范/i,
+    art_index:    /INDEX|索引|目录\.md|README\.md$/i,
+    art_tool:    /(^|\/)(tools|scripts)\/|\.(cjs|mjs)$/i,
+    art_test:    /(^|\/)(tests|test)\/|audit|smoke|check/i
+  };
+  REGEXES.generic = {
+    phase_0: /README/i,
+    phase_3: /LICENSE|CHANGELOG|release/i
+  };
+  REGEXES.iac = {
+    phase_0: /(^|\/)modules\//i,
+    phase_1: /(main|variables|outputs|providers|versions)\.tf$/i,
+    phase_2: /\.tfvars$|(^|\/)(environments?|envs)\//i,
+    phase_3: /backend|terraform\.tfstate|state\.(tf|lock)|dynamodb/i,
+    phase_4: /terraform-docs|README.*terraform/i,
+    phase_5: /vault|\.gitignore|secret/i,
+    art_modules: /(^|\/)modules\//i,
+    art_root:    /(main|variables|outputs|providers|versions)\.tf$/i,
+    art_env:     /\.tfvars$|(^|\/)(environments?|envs)\//i,
+    art_state:   /backend|terraform\.tfstate|state\.(tf|lock)|dynamodb/i,
+    art_docs:    /terraform-docs/i,
+    art_secret:  /vault|\.gitignore|secret/i
+  };
+  REGEXES.embedded = {
+    phase_0: /(^|\/)(hal|bsp|drivers?|services?|middleware|app)\//i,
+    phase_1: /(^|\/)(hal|drivers?)\//i,
+    phase_2: /CMakeLists\.txt$|Makefile$/i,
+    phase_3: /(^|\/)(bsp|board)\/|\.ld$|\.sct$/i,
+    phase_4: /(^|\/)(tests?|test)\//i,
+    phase_5: /(^|\/)docs\/|HW-SW|hardware|design\.md/i,
+    phase_6: /(\.bin|\.hex|ota|sign|flash)/i,
+    art_layer: /(^|\/)(hal|bsp|drivers?|services?|app)\//i,
+    art_build: /CMakeLists\.txt$|Makefile$/i,
+    art_link:  /\.ld$|\.sct$/i,
+    art_docs:  /(^|\/)docs\/|HW-SW|hardware/i,
+    art_ota:   /(\.bin|\.hex|ota|sign|flash)/i
+  };
+  REGEXES.extension = {
+    phase_0: /manifest\.json$/i,
+    phase_1: /(^|\/)(background|service[-_]?worker)\.(js|ts)$/i,
+    phase_2: /(^|\/)(content|content[-_]?scripts)\//i,
+    phase_3: /(^|\/)(popup|options)\//i,
+    phase_4: /chrome\.storage|chrome\.runtime|sendMessage|storage\.local/i,
+    phase_5: /(vite|webpack|rollup|vitest|playwright)|(^|\/)tests?\//i,
+    phase_6: /_locales|CHANGELOG|web[-_]?store|\.pem$/i,
+    art_manifest: /manifest\.json$/i,
+    art_bg:       /(^|\/)(background|service[-_]?worker)\./i,
+    art_content:  /(^|\/)(content|content[-_]?scripts)\//i,
+    art_popup:    /(^|\/)(popup|options)\//i,
+    art_icons:    /(^|\/)icons\//i,
+    art_store:    /_locales|CHANGELOG|web[-_]?store/i
+  };
+  REGEXES.data = {
+    phase_0: /(^|\/)warehouse\/(ods|dwd|dws|ads|dim)\//i,
+    phase_1: /(^|\/)(extract|ingestion|sources?)\//i,
+    phase_2: /(^|\/)(transform|processing)\//i,
+    phase_3: /(^|\/)dags\/|airflow/i,
+    phase_4: /(quality|dq|validation|schema)/i,
+    phase_5: /(^|\/)(config|conf|environments?)\/|\.env/i,
+    phase_6: /(logs?|monitor|observ|metrics)/i,
+    art_layer:     /(^|\/)warehouse\/(ods|dwd|dws|ads|dim)\//i,
+    art_ingest:    /(^|\/)(extract|ingestion|sources?)\//i,
+    art_transform: /(^|\/)(transform|processing)\//i,
+    art_orch:      /(^|\/)dags\/|airflow/i,
+    art_quality:   /(quality|dq|validation)/i,
+    art_config:    /(^|\/)(config|conf|environments?)\/|\.env/i,
+    art_obs:       /(logs?|monitor|observ|metrics)/i
+  };
+  REGEXES.cli = {
+    phase_0: /(^|\/)__main__\.py$|(^|\/)bin\/|package\.json.*bin|(^|\/)(cmd|cli|commands?)\//i,
+    phase_1: /(^|\/)(commands?|cmd|handlers?)\//i,
+    phase_2: /--help|usage/i,
+    phase_3: /(^|\/)(config|conf|settings)\/|\.env|argparse|click/i,
+    phase_4: /(stdin|stdout|pipe|exit[-_]?code)/i,
+    phase_6: /setup\.py|pyproject|package\.json.*bin|brew\.rb|\.sh$/i,
+    art_entry:   /(^|\/)__main__\.py$|(^|\/)bin\/|\.sh$/i,
+    art_help:    /--help|usage/i,
+    art_config:  /(^|\/)(config|conf|settings)\/|\.env/i,
+    art_pipe:    /(stdin|stdout|pipe|exit[-_]?code)/i,
+    art_install: /setup\.py|pyproject|package\.json.*bin|brew\.rb/i
+  };
+  REGEXES.mobile = {
+    phase_0: /(AndroidManifest\.xml|\.xcodeproj|\.xcworkspace|pubspec\.yaml)$/i,
+    phase_1: /(^|\/)(ui|screens?|views?|composables?|widgets?)\//i,
+    phase_2: /(^|\/)(data|models?|repositories?|network|api)\//i,
+    phase_3: /(^|\/)(navigation|router|routes?)\//i,
+    phase_4: /(^|\/)(permissions?|native|platform|modules?)\//i,
+    phase_5: /(^|\/)(res|Assets\.xcassets|resources|l10n|i18n)\//i,
+    phase_6: /(^|\/)(fastlane|gradle|config)\/|build\.gradle|Info\.plist|\.keystore|\.mobileprovision/i,
+    art_manifest: /(AndroidManifest\.xml|\.xcodeproj|\.xcworkspace|pubspec\.yaml)$/i,
+    art_ui:       /(^|\/)(ui|screens?|views?|composables?)\//i,
+    art_data:     /(^|\/)(data|models?|repositories?|network)\//i,
+    art_nav:      /(^|\/)(navigation|router|routes?)\//i,
+    art_native:   /(^|\/)(permissions?|native|platform)\//i,
+    art_res:      /(^|\/)(res|Assets\.xcassets|l10n)\//i
+  };
+  REGEXES.desktop = {
+    phase_0: /(main\.(js|ts)|App\.xaml|main\.dart|src-tauri\/|tauri\.conf\.json|Program\.cs)/i,
+    phase_1: /(^|\/)(components?|views?|pages?|renderer|windows?|widgets?)\//i,
+    phase_2: /(^|\/)(native|platform|system|tray|menu|ipc)\//i,
+    phase_3: /(^|\/)(store|state|db|database|storage)\//i,
+    phase_4: /(electron-builder|tauri|wix|InnoSetup|\.csproj|build\/)/i,
+    phase_5: /(^|\/)(updater|auto[-_]?update|sparkle)\//i,
+    phase_6: /\.(dmg|exe|msi|AppImage|deb|rpm)$/i,
+    art_entry:   /(main\.(js|ts)|App\.xaml|main\.dart|src-tauri\/|tauri\.conf\.json)/i,
+    art_ui:      /(^|\/)(components?|views?|renderer|windows?)\//i,
+    art_native:  /(^|\/)(native|ipc|tray|menu|system)\//i,
+    art_store:   /(^|\/)(store|state|db|storage)\//i,
+    art_build:   /(electron-builder|tauri|wix|InnoSetup|\.csproj)/i,
+    art_install: /\.(dmg|exe|msi|AppImage|deb|rpm)$/i
+  };
+  REGEXES.aiml = {
+    phase_0: /(^|\/)(data|datasets?|raw|processed)\//i,
+    phase_1: /(^|\/)(train|training|finetune|finetuning|scripts?)\//i,
+    phase_2: /(^|\/)(models?|nets?|architectures?)\//i,
+    phase_3: /(^|\/)(inference|serve|serving|api|deploy)\//i,
+    phase_4: /(^|\/)(eval|evaluation|metrics|benchmarks?)\//i,
+    phase_5: /(^|\/)(configs?|conf|experiments?|hydra)\//i,
+    phase_6: /\.ipynb$/i,
+    art_data:     /(^|\/)(data|datasets?)\//i,
+    art_train:    /(^|\/)(train|training|finetune)\//i,
+    art_model:    /(^|\/)(models?)\//i,
+    art_notebook: /\.ipynb$/i,
+    art_config:   /(^|\/)(configs?|experiments?)\//i,
+    art_weights:  /\.(onnx|pt|pth|h5|hdf5|ckpt|safetensors|gguf)$/i
+  };
+  REGEXES.devops = {
+    phase_0: /(^|\/)\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|(^|\/)\.circleci/i,
+    phase_1: /(Dockerfile|Containerfile|docker-compose\.yml|\.dockerignore)$/i,
+    phase_2: /(^|\/)(k8s|kubernetes|manifests?|deploy|deployments|helm|charts|argocd)\//i,
+    phase_3: /(^|\/)(ansible|playbooks?|roles|group_vars|inventory)\//i,
+    phase_4: /(^|\/)(env|environments?|secrets?)\//i,
+    phase_5: /(^|\/)(logs?|monitor|observ|metrics|grafana|prometheus)\//i,
+    phase_6: /(^|\/)(scripts?|bin)\//i,
+    art_ci:         /(^|\/)\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|(^|\/)\.circleci/i,
+    art_container:  /(Dockerfile|Containerfile|docker-compose\.yml)$/i,
+    art_orch:       /(^|\/)(k8s|kubernetes|manifests?|deploy|helm|charts)\//i,
+    art_configmgmt: /(^|\/)(ansible|playbooks?|roles)\//i,
+    art_env:        /(^|\/)(env|environments?|secrets?)\//i,
+    art_obs:        /(^|\/)(logs?|monitor|observ|metrics)\//i,
+    art_scripts:    /(^|\/)(scripts?|bin)\//i
+  };
+  REGEXES.microservice = {
+    phase_0: /(^|\/)(services|apps|packages|cmd|deployments)\//i,
+    phase_1: /(^|\/)(api-gateway|gateway|gateway-api|edge|router)\//i,
+    phase_2: /(^|\/)(proto|protos|grpc|pb|contracts?)\/|\.proto$/i,
+    phase_3: /(^|\/)(common|shared|libs|internal\/pkg|pkg)\//i,
+    phase_4: /(^|\/)(repositories?|entities|migrations?)\//i,
+    phase_5: /(^|\/)(config|discovery|registry|consul|etcd)\//i,
+    phase_6: /(docker-compose\.yml|(^|\/)(k8s|deploy|helm)\/)/i,
+    art_services: /(^|\/)(services|apps|packages|cmd)\/[^/]+\//i,
+    art_gateway:  /(^|\/)(api-gateway|gateway|gateway-api)\//i,
+    art_contract: /(^|\/)(proto|protos|grpc)\/|\.proto$/i,
+    art_shared:   /(^|\/)(common|shared|libs|internal\/pkg)\//i,
+    art_config:   /(^|\/)(config|discovery|registry)\//i,
+    art_deploy:   /(docker-compose\.yml|(^|\/)(k8s|deploy|helm)\/)/i
+  };
 
   // —— 分析模板：项目形态不同，该问的问题也不同 ——
   var PROFILES = {
     game: {
       id:"game", name:"游戏项目", tag:"CCGS 八阶段",
       phases:[
-        { id:0, name:"诊断",   re:/STUDIO_OVERVIEW|诊断|audit|现状盘点|复盘/i },
-        { id:1, name:"概念",   re:/concept|概念|pitch|立项/i },
-        { id:2, name:"系统设计", re:/gdd|系统设计/i },
-        { id:3, name:"技术搭建", re:/architect|adr|架构|技术方案/i },
-        { id:4, name:"预制作", re:/ux-spec|ux[_-]?design|art-bible|asset-spec|epics|预[制製]作|原型/i },
-        { id:5, name:"制作",   re:/sprint|production\/|src\//i },
-        { id:6, name:"打磨",   re:/balance|perf|polish|打磨|优化报告|playtest/i },
-        { id:7, name:"发布",   re:/release|changelog|launch|发布|部署/i }
+        { id:0, name:"诊断",   re:REGEXES.game.phase_0 },
+        { id:1, name:"概念",   re:REGEXES.game.phase_1 },
+        { id:2, name:"系统设计", re:REGEXES.game.phase_2 },
+        { id:3, name:"技术搭建", re:REGEXES.game.phase_3 },
+        { id:4, name:"预制作", re:REGEXES.game.phase_4 },
+        { id:5, name:"制作",   re:REGEXES.game.phase_5 },
+        { id:6, name:"打磨",   re:REGEXES.game.phase_6 },
+        { id:7, name:"发布",   re:REGEXES.game.phase_7 }
       ],
       artifacts:[
-        { key:"GDD",  label:"设计文档 GDD", re:/design\/gdd\/.+\.md$|gdd/i },
-        { key:"ADR",  label:"架构决策 ADR", re:/adr/i },
-        { key:"ARCH", label:"架构文档",     re:/architect/i },
-        { key:"UX",   label:"UX 规范",      re:/ux-spec|ux[_-]?design/i },
-        { key:"ART",  label:"美术规范",     re:/art-bible|asset-spec|art\//i },
-        { key:"PLAN", label:"迭代 / 冲刺计划", re:/sprint|epics|roadmap|计划/i },
-        { key:"TEST", label:"测试",         re:RE_TEST },
-        { key:"CI",   label:"CI 配置",      re:RE_CI },
-        { key:"DOC",  label:"说明文档",     re:RE_DOC }
+        { key:"GDD",  label:"设计文档 GDD", re:REGEXES.game.art_gdd },
+        { key:"ADR",  label:"架构决策 ADR", re:REGEXES.game.art_adr },
+        { key:"ARCH", label:"架构文档",     re:REGEXES.game.art_arch },
+        { key:"UX",   label:"UX 规范",      re:REGEXES.game.art_ux },
+        { key:"ART",  label:"美术规范",     re:REGEXES.game.art_art },
+        { key:"PLAN", label:"迭代 / 冲刺计划", re:REGEXES.game.art_plan },
+        { key:"TEST", label:"测试",         re:REGEXES.testDir },
+        { key:"CI",   label:"CI 配置",      re:REGEXES.ci },
+        { key:"DOC",  label:"说明文档",     re:REGEXES.readme }
       ],
       advice: adviceGame
     },
@@ -215,20 +503,20 @@
     web: {
       id:"web", name:"Web 应用", tag:"需求到部署",
       phases:[
-        { id:0, name:"需求",   re:/requirement|需求|prd|产品需求/i },
+        { id:0, name:"需求",   re:REGEXES.web.phase_0 },
         { id:1, name:"设计",   re:/(^|\/)design\/|原型|wireframe|ui-spec|设计稿/i },
         { id:2, name:"实现",   re:/src\/|components?\/|pages?\/|views?\/|app\//i },
-        { id:3, name:"构建部署", re:/deploy|Dockerfile|vercel|netlify|nginx|workflows/i },
-        { id:4, name:"监控迭代", re:/monitor|sentry|analytics|埋点|CHANGELOG|迭代/i }
+        { id:3, name:"构建部署", re:REGEXES.web.phase_3 },
+        { id:4, name:"监控迭代", re:REGEXES.web.phase_4 }
       ],
       artifacts:[
-        { key:"README", label:"README",     re:RE_DOC },
+        { key:"README", label:"README",     re:REGEXES.readme },
         { key:"ENV",    label:"环境变量示例", re:/\.env\.(example|sample)/i },
         { key:"API",    label:"接口文档",    re:/api\.(md|ya?ml|json)$|swagger|openapi/i },
         { key:"STYLE",  label:"样式规范",    re:/style-guide|design-token|tailwind\.config|theme\./i },
         { key:"DEPLOY", label:"部署配置",    re:/Dockerfile|docker-compose|vercel\.json|netlify\.toml|\.github\/workflows/i },
-        { key:"TEST",   label:"测试",        re:RE_TEST },
-        { key:"CI",     label:"CI 配置",     re:RE_CI }
+        { key:"TEST",   label:"测试",        re:REGEXES.testDir },
+        { key:"CI",     label:"CI 配置",     re:REGEXES.ci }
       ],
       advice: adviceWeb
     },
@@ -244,7 +532,7 @@
         { id:5, name:"交付上线", re:/Dockerfile|docker-compose|health|readiness|liveness|actuator|\.github\/workflows/i }
       ],
       artifacts:[
-        { key:"README",  label:"README",        re:RE_DOC },
+        { key:"README",  label:"README",        re:REGEXES.readme },
         { key:"ENV",     label:"环境变量示例",   re:/\.env\.(example|sample|template)/i },
         { key:"CONFIG",  label:"配置文件",       re:/application\.(yml|yaml|properties|toml)|(^|\/)(config|conf|settings)\//i },
         { key:"API",     label:"API 文档",       re:/swagger|openapi|api\.(md|ya?ml|json)$|(^|\/)docs\/api/i },
@@ -253,9 +541,9 @@
         { key:"ERR",     label:"统一错误处理",    re:/(^|\/)(errors?|exceptions?)\/|error[_-]?handler/i },
         { key:"LOG",     label:"日志",           re:/(^|\/)(logs?|logger|logging)\/|winston|logrus|zap|log4j|loguru/i },
         { key:"DOCKER",  label:"容器化",         re:/Dockerfile|docker-compose|\.dockerignore/i },
-        { key:"HEALTH",  label:"健康检查",       re:/health|readiness|liveness|actuator/i },
-        { key:"TEST",    label:"测试",           re:RE_TEST },
-        { key:"CI",      label:"CI 配置",        re:RE_CI }
+        { key:"HEALTH",  label:"健康检查",       re:REGEXES.server.art_health },
+        { key:"TEST",    label:"测试",           re:REGEXES.testDir },
+        { key:"CI",      label:"CI 配置",        re:REGEXES.ci }
       ],
       advice: adviceServer
     },
@@ -270,14 +558,14 @@
         { id:4, name:"发布",     re:/CHANGELOG|release|\.npmignore|publish/i }
       ],
       artifacts:[
-        { key:"README",    label:"README",     re:RE_DOC },
+        { key:"README",    label:"README",     re:REGEXES.readme },
         { key:"LICENSE",   label:"开源协议",    re:/LICENSE/i },
         { key:"CHANGELOG", label:"变更日志",    re:/CHANGELOG/i },
         { key:"API",       label:"API 文档",    re:/api\.(md|ya?ml|json)$|docs\/api|typedoc|jsdoc/i },
         { key:"TYPE",      label:"类型定义",    re:/\.d\.ts$|types\//i },
         { key:"EXAMPLE",   label:"示例 / demo", re:/example|demo|samples/i },
-        { key:"TEST",      label:"测试",        re:RE_TEST },
-        { key:"CI",        label:"CI 配置",     re:RE_CI }
+        { key:"TEST",      label:"测试",        re:REGEXES.testDir },
+        { key:"CI",        label:"CI 配置",     re:REGEXES.ci }
       ],
       advice: adviceLib
     },
@@ -309,12 +597,12 @@
         { id:2, name:"分发",   re:/\.(bat|sh|exe)$|package\.json|Makefile/i }
       ],
       artifacts:[
-        { key:"README", label:"README",   re:RE_DOC },
+        { key:"README", label:"README",   re:REGEXES.readme },
         { key:"USAGE",  label:"使用说明",  re:/README|usage|使用说明|用法/i },
         { key:"LAUNCH", label:"启动脚本",  re:/\.(bat|sh)$/i },
         { key:"CONFIG", label:"配置说明",  re:/config|配置|\.env/i },
-        { key:"TEST",   label:"测试",      re:RE_TEST },
-        { key:"CI",     label:"CI 配置",   re:RE_CI }
+        { key:"TEST",   label:"测试",      re:REGEXES.testDir },
+        { key:"CI",     label:"CI 配置",   re:REGEXES.ci }
       ],
       advice: adviceTool
     },
@@ -329,13 +617,13 @@
         { id:4, name:"自检",   re:/(^|\/)(tests|test)\/|audit|smoke|check|lint|校验/i }
       ],
       artifacts:[
-        { key:"README",   label:"README",     re:RE_DOC },
+        { key:"README",   label:"README",     re:REGEXES.readme },
         { key:"OVERVIEW", label:"项目总览",    re:/OVERVIEW|总览|概览|PROJECT_OVERVIEW/i },
         { key:"CONV",     label:"约定文档",    re:/约定|CONVENTIONS|(^|\/)rules\/|规范/i },
         { key:"INDEX",    label:"索引 / 目录", re:/INDEX|索引|目录\.md|README\.md$/i },
         { key:"TOOL",     label:"工具脚本",    re:/(^|\/)(tools|scripts)\/|\.(cjs|mjs)$/i },
         { key:"TEST",     label:"自检脚本",    re:/(^|\/)(tests|test)\/|audit|smoke|check/i },
-        { key:"CI",       label:"CI 配置",     re:RE_CI }
+        { key:"CI",       label:"CI 配置",     re:REGEXES.ci }
       ],
       advice: adviceMeta
     },
@@ -344,15 +632,15 @@
       id:"generic", name:"通用项目", tag:"基础工程化",
       phases:[
         { id:0, name:"说明",   re:/README/i },
-        { id:1, name:"源码",   re:RE_SRC },
-        { id:2, name:"工程化", re:RE_CI },
+        { id:1, name:"源码",   re:REGEXES.src },
+        { id:2, name:"工程化", re:REGEXES.ci },
         { id:3, name:"发布",   re:/LICENSE|CHANGELOG|release/i }
       ],
       artifacts:[
-        { key:"README",  label:"README",   re:RE_DOC },
+        { key:"README",  label:"README",   re:REGEXES.readme },
         { key:"LICENSE", label:"开源协议",  re:/LICENSE/i },
-        { key:"TEST",    label:"测试",      re:RE_TEST },
-        { key:"CI",      label:"CI 配置",   re:RE_CI }
+        { key:"TEST",    label:"测试",      re:REGEXES.testDir },
+        { key:"CI",      label:"CI 配置",   re:REGEXES.ci }
       ],
       advice: adviceGeneric
     },
@@ -366,17 +654,17 @@
         { id:3, name:"状态与锁", re:/backend|terraform\.tfstate|state\.(tf|lock)|dynamodb/i },
         { id:4, name:"文档",     re:/terraform-docs|README.*terraform/i },
         { id:5, name:"安全",     re:/vault|\.gitignore|secret/i },
-        { id:6, name:"CI 计划",  re:RE_CI }
+        { id:6, name:"CI 计划",  re:REGEXES.ci }
       ],
       artifacts:[
-        { key:"README",  label:"README",        re:RE_DOC },
+        { key:"README",  label:"README",        re:REGEXES.readme },
         { key:"MODULES", label:"可复用模块",     re:/(^|\/)modules\//i },
         { key:"ROOT",    label:"根模块文件",     re:/(main|variables|outputs|providers|versions)\.tf$/i },
         { key:"ENV",     label:"环境配置",       re:/\.tfvars$|(^|\/)(environments?|envs)\//i },
         { key:"STATE",   label:"远端状态锁",     re:/backend|terraform\.tfstate|state\.(tf|lock)|dynamodb/i },
         { key:"DOCS",    label:"模块文档",       re:/terraform-docs/i },
         { key:"SECRET",  label:"密钥管理",       re:/vault|\.gitignore|secret/i },
-        { key:"CI",      label:"CI 配置",        re:RE_CI }
+        { key:"CI",      label:"CI 配置",        re:REGEXES.ci }
       ],
       advice: adviceIac
     },
@@ -393,11 +681,11 @@
         { id:6, name:"固件交付", re:/(\.bin|\.hex|ota|sign|flash)/i }
       ],
       artifacts:[
-        { key:"README",  label:"README",     re:RE_DOC },
+        { key:"README",  label:"README",     re:REGEXES.readme },
         { key:"LAYER",   label:"分层目录",    re:/(^|\/)(hal|bsp|drivers?|services?|app)\//i },
         { key:"BUILD",   label:"构建系统",    re:/CMakeLists\.txt$|Makefile$/i },
         { key:"LINK",    label:"链接脚本",    re:/\.ld$|\.sct$/i },
-        { key:"TEST",    label:"测试",        re:RE_TEST },
+        { key:"TEST",    label:"测试",        re:REGEXES.testDir },
         { key:"DOCS",    label:"硬件接口文档", re:/(^|\/)docs\/|HW-SW|hardware/i },
         { key:"OTA",     label:"固件签名/OTA", re:/(\.bin|\.hex|ota|sign|flash)/i }
       ],
@@ -416,15 +704,15 @@
         { id:6, name:"发布清单", re:/_locales|CHANGELOG|web[-_]?store|\.pem$/i }
       ],
       artifacts:[
-        { key:"README",   label:"README",      re:RE_DOC },
+        { key:"README",   label:"README",      re:REGEXES.readme },
         { key:"MANIFEST", label:"MV3 清单",     re:/manifest\.json$/i },
         { key:"BG",       label:"后台脚本",      re:/(^|\/)(background|service[-_]?worker)\./i },
         { key:"CONTENT",  label:"内容脚本",      re:/(^|\/)(content|content[-_]?scripts)\//i },
         { key:"POPUP",    label:"弹窗/选项页",   re:/(^|\/)(popup|options)\//i },
         { key:"ICONS",    label:"图标 16/48/128", re:/(^|\/)icons\//i },
         { key:"STORE",    label:"上架材料",      re:/_locales|CHANGELOG|web[-_]?store/i },
-        { key:"TEST",     label:"测试",         re:RE_TEST },
-        { key:"CI",       label:"CI 配置",       re:RE_CI }
+        { key:"TEST",     label:"测试",         re:REGEXES.testDir },
+        { key:"CI",       label:"CI 配置",       re:REGEXES.ci }
       ],
       advice: adviceExtension
     },
@@ -439,10 +727,10 @@
         { id:4, name:"数据质量", re:/(quality|dq|validation|schema)/i },
         { id:5, name:"环境隔离", re:/(^|\/)(config|conf|environments?)\/|\.env/i },
         { id:6, name:"可观测",   re:/(logs?|monitor|observ|metrics)/i },
-        { id:7, name:"测试",     re:RE_TEST }
+        { id:7, name:"测试",     re:REGEXES.testDir }
       ],
       artifacts:[
-        { key:"README",   label:"README",        re:RE_DOC },
+        { key:"README",   label:"README",        re:REGEXES.readme },
         { key:"LAYER",    label:"数仓分层",       re:/(^|\/)warehouse\/(ods|dwd|dws|ads|dim)\//i },
         { key:"INGEST",   label:"接入脚本",       re:/(^|\/)(extract|ingestion|sources?)\//i },
         { key:"TRANSFORM",label:"转换脚本",       re:/(^|\/)(transform|processing)\//i },
@@ -450,7 +738,7 @@
         { key:"QUALITY",  label:"质量规则",       re:/(quality|dq|validation)/i },
         { key:"CONFIG",   label:"环境配置",       re:/(^|\/)(config|conf|environments?)\/|\.env/i },
         { key:"OBS",      label:"日志监控",       re:/(logs?|monitor|observ|metrics)/i },
-        { key:"TEST",     label:"测试",           re:RE_TEST }
+        { key:"TEST",     label:"测试",           re:REGEXES.testDir }
       ],
       advice: adviceData
     },
@@ -463,17 +751,17 @@
         { id:2, name:"文档",     re:/--help|usage/i },
         { id:3, name:"配置环境", re:/(^|\/)(config|conf|settings)\/|\.env|argparse|click/i },
         { id:4, name:"可组合",   re:/(stdin|stdout|pipe|exit[-_]?code)/i },
-        { id:5, name:"测试",     re:RE_TEST },
+        { id:5, name:"测试",     re:REGEXES.testDir },
         { id:6, name:"安装分发", re:/setup\.py|pyproject|package\.json.*bin|brew\.rb|\.sh$/i }
       ],
       artifacts:[
-        { key:"README",   label:"README",      re:RE_DOC },
+        { key:"README",   label:"README",      re:REGEXES.readme },
         { key:"ENTRY",    label:"入口脚本",     re:/(^|\/)__main__\.py$|(^|\/)bin\/|\.sh$/i },
         { key:"HELP",     label:"用法说明",     re:/--help|usage/i },
         { key:"CONFIG",   label:"配置/环境",    re:/(^|\/)(config|conf|settings)\/|\.env/i },
         { key:"PIPE",     label:"管道/退出码",   re:/(stdin|stdout|pipe|exit[-_]?code)/i },
-        { key:"TEST",     label:"测试",         re:RE_TEST },
-        { key:"CI",       label:"CI 配置",       re:RE_CI },
+        { key:"TEST",     label:"测试",         re:REGEXES.testDir },
+        { key:"CI",       label:"CI 配置",       re:REGEXES.ci },
         { key:"INSTALL",  label:"安装分发",      re:/setup\.py|pyproject|package\.json.*bin|brew\.rb/i }
       ],
       advice: adviceCli
@@ -489,18 +777,18 @@
         { id:4, name:"原生能力/权限",  re:/(^|\/)(permissions?|native|platform|modules?)\//i },
         { id:5, name:"资源/国际化",    re:/(^|\/)(res|Assets\.xcassets|resources|l10n|i18n)\//i },
         { id:6, name:"构建/签名/发布", re:/(^|\/)(fastlane|gradle|config)\/|build\.gradle|Info\.plist|\.keystore|\.mobileprovision/i },
-        { id:7, name:"测试",           re:RE_TEST }
+        { id:7, name:"测试",           re:REGEXES.testDir }
       ],
       artifacts:[
-        { key:"README",  label:"README",        re:RE_DOC },
+        { key:"README",  label:"README",        re:REGEXES.readme },
         { key:"MANIFEST",label:"平台清单",       re:/(AndroidManifest\.xml|\.xcodeproj|\.xcworkspace|pubspec\.yaml)$/i },
         { key:"UI",      label:"UI 层",         re:/(^|\/)(ui|screens?|views?|composables?)\//i },
         { key:"DATA",    label:"数据层",         re:/(^|\/)(data|models?|repositories?|network)\//i },
         { key:"NAV",     label:"导航",           re:/(^|\/)(navigation|router|routes?)\//i },
         { key:"NATIVE",  label:"原生能力",       re:/(^|\/)(permissions?|native|platform)\//i },
         { key:"RES",     label:"资源/国际化",    re:/(^|\/)(res|Assets\.xcassets|l10n)\//i },
-        { key:"TEST",    label:"测试",           re:RE_TEST },
-        { key:"CI",      label:"CI 配置",        re:RE_CI }
+        { key:"TEST",    label:"测试",           re:REGEXES.testDir },
+        { key:"CI",      label:"CI 配置",        re:REGEXES.ci }
       ],
       advice: adviceMobile
     },
@@ -515,18 +803,18 @@
         { id:4, name:"打包构建",      re:/(electron-builder|tauri|wix|InnoSetup|\.csproj|build\/)/i },
         { id:5, name:"自动更新",      re:/(^|\/)(updater|auto[-_]?update|sparkle)\//i },
         { id:6, name:"安装分发",      re:/\.(dmg|exe|msi|AppImage|deb|rpm)$/i },
-        { id:7, name:"测试",          re:RE_TEST }
+        { id:7, name:"测试",          re:REGEXES.testDir }
       ],
       artifacts:[
-        { key:"README",  label:"README",      re:RE_DOC },
+        { key:"README",  label:"README",      re:REGEXES.readme },
         { key:"ENTRY",   label:"入口",         re:/(main\.(js|ts)|App\.xaml|main\.dart|src-tauri\/|tauri\.conf\.json)/i },
         { key:"UI",      label:"UI 层",        re:/(^|\/)(components?|views?|renderer|windows?)\//i },
         { key:"NATIVE",  label:"原生能力",     re:/(^|\/)(native|ipc|tray|menu|system)\//i },
         { key:"STORE",   label:"状态/存储",    re:/(^|\/)(store|state|db|storage)\//i },
         { key:"BUILD",   label:"打包构建",     re:/(electron-builder|tauri|wix|InnoSetup|\.csproj)/i },
         { key:"INSTALL", label:"安装包",       re:/\.(dmg|exe|msi|AppImage|deb|rpm)$/i },
-        { key:"TEST",    label:"测试",         re:RE_TEST },
-        { key:"CI",      label:"CI 配置",      re:RE_CI }
+        { key:"TEST",    label:"测试",         re:REGEXES.testDir },
+        { key:"CI",      label:"CI 配置",      re:REGEXES.ci }
       ],
       advice: adviceDesktop
     },
@@ -541,18 +829,18 @@
         { id:4, name:"评估",          re:/(^|\/)(eval|evaluation|metrics|benchmarks?)\//i },
         { id:5, name:"配置/实验",     re:/(^|\/)(configs?|conf|experiments?|hydra)\//i },
         { id:6, name:"笔记本",        re:/\.ipynb$/i },
-        { id:7, name:"测试",          re:RE_TEST }
+        { id:7, name:"测试",          re:REGEXES.testDir }
       ],
       artifacts:[
-        { key:"README",   label:"README",     re:RE_DOC },
+        { key:"README",   label:"README",     re:REGEXES.readme },
         { key:"DATA",     label:"数据集",     re:/(^|\/)(data|datasets?)\//i },
         { key:"TRAIN",    label:"训练脚本",   re:/(^|\/)(train|training|finetune)\//i },
         { key:"MODEL",    label:"模型定义",   re:/(^|\/)(models?)\//i },
         { key:"NOTEBOOK", label:"笔记本",     re:/\.ipynb$/i },
         { key:"CONFIG",   label:"配置/实验", re:/(^|\/)(configs?|experiments?)\//i },
         { key:"WEIGHTS",  label:"权重文件",   re:/\.(onnx|pt|pth|h5|hdf5|ckpt|safetensors|gguf)$/i },
-        { key:"TEST",     label:"测试",       re:RE_TEST },
-        { key:"CI",       label:"CI 配置",    re:RE_CI }
+        { key:"TEST",     label:"测试",       re:REGEXES.testDir },
+        { key:"CI",       label:"CI 配置",    re:REGEXES.ci }
       ],
       advice: adviceAiml
     },
@@ -567,10 +855,10 @@
         { id:4, name:"环境/密钥",    re:/(^|\/)(env|environments?|secrets?)\//i },
         { id:5, name:"监控/日志",    re:/(^|\/)(logs?|monitor|observ|metrics|grafana|prometheus)\//i },
         { id:6, name:"脚本/自动化",  re:/(^|\/)(scripts?|bin)\//i },
-        { id:7, name:"文档",         re:RE_DOC }
+        { id:7, name:"文档",         re:REGEXES.readme }
       ],
       artifacts:[
-        { key:"README",    label:"README",       re:RE_DOC },
+        { key:"README",    label:"README",       re:REGEXES.readme },
         { key:"CI",        label:"CI 配置",      re:/(^|\/)\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|(^|\/)\.circleci/i },
         { key:"CONTAINER", label:"容器化",       re:/(Dockerfile|Containerfile|docker-compose\.yml)$/i },
         { key:"ORCH",      label:"编排/部署",    re:/(^|\/)(k8s|kubernetes|manifests?|deploy|helm|charts)\//i },
@@ -578,7 +866,7 @@
         { key:"ENV",       label:"环境/密钥",    re:/(^|\/)(env|environments?|secrets?)\//i },
         { key:"OBS",       label:"监控/日志",    re:/(^|\/)(logs?|monitor|observ|metrics)\//i },
         { key:"SCRIPTS",   label:"自动化脚本",   re:/(^|\/)(scripts?|bin)\//i },
-        { key:"TEST",      label:"测试",         re:RE_TEST }
+        { key:"TEST",      label:"测试",         re:REGEXES.testDir }
       ],
       advice: adviceDevops
     },
@@ -593,18 +881,18 @@
         { id:4, name:"数据层(每服务)",re:/(^|\/)(repositories?|entities|migrations?)\//i },
         { id:5, name:"配置/注册",     re:/(^|\/)(config|discovery|registry|consul|etcd)\//i },
         { id:6, name:"部署/编排",     re:/(docker-compose\.yml|(^|\/)(k8s|deploy|helm)\/)/i },
-        { id:7, name:"测试",          re:RE_TEST }
+        { id:7, name:"测试",          re:REGEXES.testDir }
       ],
       artifacts:[
-        { key:"README",   label:"README",      re:RE_DOC },
+        { key:"README",   label:"README",      re:REGEXES.readme },
         { key:"SERVICES", label:"服务模块",    re:/(^|\/)(services|apps|packages|cmd)\/[^/]+\//i },
         { key:"GATEWAY",  label:"网关",        re:/(^|\/)(api-gateway|gateway|gateway-api)\//i },
         { key:"CONTRACT", label:"通信契约",    re:/(^|\/)(proto|protos|grpc)\/|\.proto$/i },
         { key:"SHARED",   label:"共享模块",    re:/(^|\/)(common|shared|libs|internal\/pkg)\//i },
         { key:"CONFIG",   label:"配置/注册",   re:/(^|\/)(config|discovery|registry)\//i },
         { key:"DEPLOY",   label:"部署编排",    re:/(docker-compose\.yml|(^|\/)(k8s|deploy|helm)\/)/i },
-        { key:"TEST",     label:"测试",        re:RE_TEST },
-        { key:"CI",       label:"CI 配置",     re:RE_CI }
+        { key:"TEST",     label:"测试",        re:REGEXES.testDir },
+        { key:"CI",       label:"CI 配置",     re:REGEXES.ci }
       ],
       advice: adviceMicroservice
     }
@@ -636,7 +924,7 @@
     // 规则 / 文档仓库：md 占多数且源码极少（要排在 Python / Node 之前判断）
     var _n = paths.length || 1;
     if (countPath(paths, /\.md$/i) / _n > 0.35 &&
-        countPath(paths, RE_SRC) / _n < 0.15 &&
+        countPath(paths, REGEXES.src) / _n < 0.15 &&
         countPath(paths, /\.md$/i) >= 3) return "规则 / 文档仓库";
 
     if (anyPath(paths, /(^|\/)index\.html$/)) {
@@ -845,89 +1133,148 @@
   }
 
   // —— 判断该用哪套模板 ——
-  function detectProfile(paths, texts, type){
+  // —— P1 重构：7 个原启发式判定改造为 score 函数 ——
+  // 全部 18 个模板（除 generic 兜底）统一走 SCORE_REGISTRY 打分排序取最高，
+  // 消除 detectProfile 的 if-else 顺序依赖（B1/B2 类 bug 的根治）。
+
+  // game：依赖 detectType 的输出字符串（type 含游戏引擎名）
+  function gameScoreV2(paths, texts, type){
+    if (type && /Godot|LÖVE|Unity|Unreal|游戏/i.test(type)) return 3;
+    return 0;
+  }
+
+  // meta：文档为主、源码极少
+  function metaScore(paths, texts){
     var n = paths.length || 1;
-    var mdN  = countPath(paths, /\.md$/i);
-    var srcN = countPath(paths, RE_SRC);
+    var mdN  = countPath(paths, REGEXES.util.mdFile);
+    var srcN = countPath(paths, REGEXES.src);
     var mdR  = mdN / n, srcR = srcN / n;
+    if (mdR > 0.35 && srcR < 0.15 && mdN >= 3) return 3;
+    return 0;
+  }
 
-    if (/Godot|LÖVE|Unity|Unreal|游戏/i.test(type)) return "game";
-
-    // 元项目 / 规则库：文档为主、源码极少
-    if (mdR > 0.35 && srcR < 0.15 && mdN >= 3) return "meta";
-
-    // 桌面应用：Electron/Tauri/Qt/WPF，有 package.json 但不是 server
-    if (desktopScore(paths, texts) >= 3) return "desktop";
-
-    // 小游戏 / 单文件交互作品：文件少、入口是 index.html、没有设计文档体系
-    var noDesign = !anyPath(paths, /(^|\/)(gdd|design|production|art)\//i);
-    if (paths.length <= 14 && noDesign && anyPath(paths, /(^|\/)index\.html$/i)){
-      var idxTxt = "";
-      for (var j=0;j<texts.length;j++){
-        if (/(^|\/)index\.html$/i.test(texts[j].path)){ idxTxt = texts[j].text; break; }
-      }
-      if (/canvas|requestAnimationFrame|game|游戏|互动|动画/i.test(idxTxt)) return "mini";
-      if (/game/i.test(paths.join(" "))) return "mini";
-      if (paths.length <= 6) return "mini";
+  // mini：文件少 + index.html + canvas/game/动画（原 detectProfile 启发式 L1150-1160）
+  function miniScore(paths, texts){
+    var noDesign = !anyPath(paths, REGEXES.util.designDir);
+    if (!(paths.length <= 14 && noDesign && anyPath(paths, REGEXES.util.indexHtml)))
+      return 0;
+    var idxTxt = "";
+    for (var j=0;j<texts.length;j++){
+      if (REGEXES.util.indexHtml.test(texts[j].path)){ idxTxt = texts[j].text; break; }
     }
+    if (/canvas|requestAnimationFrame|game|游戏|互动|动画/i.test(idxTxt)) return 3;
+    if (/game/i.test(paths.join(" "))) return 3;
+    if (paths.length <= 6) return 3;
+    return 0;
+  }
 
-    // 基础设施即代码：*.tf 最特异，最先认，避免被 server / generic 吞
-    if (iacScore(paths, texts) >= 3) return "iac";
-    // 嵌入式固件：CMake + HAL/BSP 分层 + 链接脚本
-    if (embeddedScore(paths, texts) >= 3) return "embedded";
-    // 浏览器插件：manifest MV3 + background/content/popup 结构
-    if (extensionScore(paths, texts) >= 3) return "extension";
-    // 数据工程：airflow dags + etl/spark 分层
-    if (dataScore(paths, texts) >= 3) return "data";
+  // tool：少文件/单html/bat-sh 脚本/Python-Java-Rust 少源码（合并原 3 段启发式）
+  // 注意：Python/Java/Rust + srcN<=8 归 tool；srcN>8 由 libScore 接管判 lib
+  function toolScore(paths, texts, type){
+    var n = paths.length || 1;
+    var mdN  = countPath(paths, REGEXES.util.mdFile);
+    var srcN = countPath(paths, REGEXES.src);
+    var srcR = srcN / n;
 
-    // 移动原生：AndroidManifest / iOS 工程 / Flutter，比 server 特异，先认
-    if (mobileScore(paths, texts) >= 3) return "mobile";
-    // AI / 机器学习：模型权重 + 训练，比 data 更特异
-    if (aimlScore(paths, texts) >= 3) return "aiml";
-    // 微服务：多个独立服务 + 网关/契约，先于单 server 认
-    if (microserviceScore(paths, texts) >= 3) return "microservice";
+    var singleHtml = paths.length <= 5 && anyPath(paths, REGEXES.util.singleHtml);
+    if (singleHtml) return 3;
+    if (paths.length <= 12 && srcR < 0.5 && mdN < 8) return 3;
 
-    // 后端服务：必须排在 tool / lib / web 之前——
-    // 后端项目文件往往不多，容易被 tool 抢走；而 web 的判定里含 routes/，
-    // Express 这类项目会被误判成前端应用。
-    if (!hasFrontendSignal(paths) && serverScore(paths, texts) >= 3) return "server";
+    if (anyPath(paths, REGEXES.util.batSh) && !anyPath(paths, REGEXES.util.pagesViews3))
+      return 3;
 
-    // 命令行工具：有 bin / __main__ + 参数解析，但没后端分层（否则归 server）
-    if (cliScore(paths, texts) >= 3) return "cli";
+    if (type && /Python|Java|Rust/i.test(type) && srcN <= 8) return 3;
 
-    // DevOps / CI：CI + 容器/编排，放在内部工具之前，免得含 .sh 的仓库被误判成 tool
-    if (devopsScore(paths, texts) >= 3) return "devops";
+    return 0;
+  }
 
-    // 内部工具：文件很少，或就一两个 html / 脚本
-    var singleHtml = paths.length <= 5 && anyPath(paths, /(^|\/)[^/]+\.html$/);
-    if (singleHtml || (paths.length <= 12 && srcR < 0.5 && mdN < 8)) return "tool";
-
-    // 库 / SDK：根级 package.json 暴露了入口或类型，且没有页面目录
-    // 只认根级（root/package.json），子目录里的打包配置不算数
-    var isLib = false;
+  // lib：根级 package.json 暴露入口/类型且无页面目录；
+  //      另 Python/Java/Rust 多源码（srcN>8）也归 lib（原 L1217 的 srcN>8 分支）
+  function libScore(paths, texts, type){
     for (var i=0;i<texts.length;i++){
-      if (!/package\.json$/i.test(texts[i].path)) continue;
-      if (texts[i].path.split("/").length > 2) continue;
+      if (!REGEXES.util.packageJson.test(texts[i].path)) continue;
+      if (texts[i].path.split("/").length > 2) continue;  // 只认根级
       try {
         var pk = JSON.parse(texts[i].text);
-        if (pk.main || pk.exports || pk.types || pk.typings) isLib = true;
+        if (pk.main || pk.exports || pk.types || pk.typings) {
+          if (!anyPath(paths, REGEXES.util.pagesViews)) return 3;
+        }
       } catch(e){}
       break;
     }
-    if (isLib && !anyPath(paths, /(^|\/)(pages|views|routes|public)\//i)) return "lib";
+    // Python/Java/Rust 源码多（srcN>8）→ lib（原 L1217 的 srcN>8 分支）
+    if (type && /Python|Java|Rust/i.test(type)) {
+      var srcN2 = countPath(paths, REGEXES.src);
+      if (srcN2 > 8) return 3;
+    }
+    return 0;
+  }
 
-    // Web 应用：必须有页面结构或前端框架特征。
-    // 只凭 detectType 里的 "Node" 不够——Electron 工具、CLI 也会有 package.json。
-    if (anyPath(paths, /(^|\/)(pages|views|routes|public)\//i)) return "web";
-    if (anyPath(paths, /\.(tsx|jsx|vue|svelte)$/i)) return "web";
-    // 注意：assets/ 不能当 Web 特征，桌面工具的图标也放这里
-    if (/HTML5|静态网站|前端/i.test(type) && anyPath(paths, /(^|\/)(components|styles|static)\//i)) return "web";
+  // web：页面结构或前端框架特征（原 detectProfile L1209-1212）
+  function webScore(paths, texts, type){
+    if (anyPath(paths, REGEXES.util.pagesViews)) return 3;
+    if (anyPath(paths, REGEXES.util.frontendExt)) return 3;
+    if (type && /HTML5|静态网站|前端/i.test(type) &&
+        anyPath(paths, REGEXES.util.componentsDir)) return 3;
+    return 0;
+  }
 
-    // 内部工具：带 bat / sh 启动脚本的桌面或命令行工具
-    if (anyPath(paths, /\.(bat|sh)$/i) && !anyPath(paths, /(^|\/)(pages|views|routes)\//i)) return "tool";
+  // server 守卫：有前端信号时不计后端分（原 detectProfile L1181 的 !hasFrontendSignal）
+  function serverScoreV2(paths, texts, type){
+    if (hasFrontendSignal(paths)) return 0;
+    return serverScore(paths, texts);
+  }
 
-    if (/Python|Java|Rust/i.test(type)) return srcN > 8 ? "lib" : "tool";
-    return "generic";
+  // —— 打分注册表：所有模板的 score 函数在此注册，detectProfile 遍历此表 ——
+  // 不再靠 if-else 顺序，顺序错了不会导致误判（B1/B2 类 bug 根治）
+  var SCORE_REGISTRY = [
+    { id: "game",         fn: gameScoreV2   },  // type-based，优先级 100 保证赢同分
+    { id: "iac",          fn: iacScore      },
+    { id: "embedded",     fn: embeddedScore },
+    { id: "extension",    fn: extensionScore},
+    { id: "mobile",       fn: mobileScore   },
+    { id: "desktop",      fn: desktopScore  },
+    { id: "aiml",         fn: aimlScore     },
+    { id: "microservice", fn: microserviceScore },
+    { id: "data",         fn: dataScore     },
+    { id: "server",       fn: serverScoreV2 },  // 带 !hasFrontendSignal 守卫
+    { id: "devops",       fn: devopsScore   },
+    { id: "cli",          fn: cliScore      },
+    { id: "mini",         fn: miniScore     },
+    { id: "meta",         fn: metaScore     },
+    { id: "lib",          fn: libScore      },
+    { id: "web",          fn: webScore      },
+    { id: "tool",         fn: toolScore     }
+    // generic 不在注册表，是 detectProfile 的兜底返回值
+  ];
+
+  // —— 优先级裁决表：同分时数值大的赢。依据：特征越特异优先级越高 ——
+  var PRIORITY = {
+    game:100, iac:16, embedded:15, extension:14, mobile:13,
+    desktop:12, aiml:11, microservice:10, data:9, server:8,
+    devops:7, cli:6, mini:5, meta:4, lib:3, web:2, tool:1
+  };
+
+  // —— 新 detectProfile：打分 → 过滤达标(>=3) → 排序(分数降序,优先级降序) → 取最高 ——
+  // 抽出 detectProfileHits 供测试佐证「多个模板同时达标」时谁赢，断言打分排序真生效。
+  function detectProfileHits(paths, texts, type){
+    var hits = [];
+    for (var i = 0; i < SCORE_REGISTRY.length; i++) {
+      var entry = SCORE_REGISTRY[i];
+      var score = entry.fn(paths, texts, type);
+      if (score >= 3) {
+        hits.push({ id: entry.id, score: score, priority: PRIORITY[entry.id] });
+      }
+    }
+    return hits;
+  }
+  function detectProfile(paths, texts, type){
+    var hits = detectProfileHits(paths, texts, type);
+    if (!hits.length) return "generic";
+    hits.sort(function(a, b) {
+      return b.score - a.score || b.priority - a.priority;
+    });
+    return hits[0].id;
   }
 
   // 在 html 正文里找证据（用于「有没有结束页」这类只能看内容的问题）
@@ -1010,7 +1357,7 @@
       var hit = anyPath(files, MANIFEST[i].re);
       if (hit){ score += MANIFEST[i].w; kind = MANIFEST[i].kind; ev = hit; break; }
     }
-    var srcN = countPath(files, RE_SRC);
+    var srcN = countPath(files, REGEXES.src);
     if (anyPath(files, /(^|\/)(src|lib|app|cmd|internal)\//i)) score += 2;
     else if (srcN >= 3) score += 2;
     else if (srcN >= 1) score += 1;
@@ -1077,7 +1424,7 @@
 
   function readTexts(files){
     var targets = files.filter(function(f){
-      return TEXT_RE.test(f.name) && f.size < MAX_SIZE;
+      return REGEXES.textFile.test(f.name) && f.size < MAX_SIZE;
     }).slice(0, MAX_TEXTS);
     var out = [];
     return targets.reduce(function(chain, f){
@@ -1111,7 +1458,7 @@
   // 浏览器入口：先按 NOISE 过滤，再读文本内容
   function analyze(fileList, label, profileId){
     var files = Array.prototype.slice.call(fileList)
-      .filter(function(f){ return !NOISE.test(f.webkitRelativePath.replace(/\\/g,"/")); });
+      .filter(function(f){ return !REGEXES.noise.test(f.webkitRelativePath.replace(/\\/g,"/")); });
     if (!files.length) return Promise.resolve(null);
     return readTexts(files).then(function(texts){
       return analyzeEntries({
@@ -2431,6 +2778,26 @@
   });
   selP.onchange = function(){ applyProfile(this.value); };
 
+  // —— P1：REGEXES 加载时自检 ——
+  // 正则集中管理后，万一某条正则被提前闭合或写错成普通字符串，运行期才暴露就晚了。
+  // 这里在 __PA 赋值前遍历 REGEXES 所有叶子，断言全是 RegExp 实例；不是就抛错，加载期即暴露。
+  function checkRegexes(obj, trail) {
+    trail = trail || "REGEXES";
+    var keys = Object.keys(obj);
+    for (var k = 0; k < keys.length; k++) {
+      var key = keys[k];
+      var v = obj[key];
+      var p = trail + "." + key;
+      // 子对象（如 util、REGEXES.game）递归；RegExp 自身也是 object，要先排除
+      if (v && typeof v === "object" && !(v instanceof RegExp)) {
+        checkRegexes(v, p);
+      } else if (!(v instanceof RegExp)) {
+        throw new Error("REGEXES 自检失败：" + p + " 不是 RegExp 实例（疑似正则提前闭合或拼写退化成字符串）");
+      }
+    }
+  }
+  checkRegexes(REGEXES, "REGEXES");
+
   window.__PA = {
     analyze: analyze, buildData: buildData,
     detectType: detectType, detectProfile: detectProfile,
@@ -2441,6 +2808,12 @@
     dataScore: dataScore, cliScore: cliScore,
     mobileScore: mobileScore, desktopScore: desktopScore, aimlScore: aimlScore,
     devopsScore: devopsScore, microserviceScore: microserviceScore,
+    // P1 重构新增的 7 个 score 函数（原启发式判定改造而来）
+    gameScoreV2: gameScoreV2, metaScore: metaScore, miniScore: miniScore,
+    toolScore: toolScore, libScore: libScore, webScore: webScore, serverScoreV2: serverScoreV2,
+    // P1 重构：打分注册表与优先级裁决表（供测试与诊断调用）
+    SCORE_REGISTRY: SCORE_REGISTRY, PRIORITY: PRIORITY, REGEXES: REGEXES,
+    _detectProfileHits: detectProfileHits,  // 下划线 = 测试用，返回全部达标命中
     analyzeEntries: analyzeEntries, readTexts: readTexts,
     // 下划线前缀 = 给测试用的内部接口
     _setSel: function(label, arr){ SEL[label] = arr; },

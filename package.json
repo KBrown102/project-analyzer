@@ -4,8 +4,9 @@
   "description": "项目结构分析器 - 单文件零依赖 HTML 工具，按项目形态分析本地目录并对比",
   "private": true,
   "scripts": {
-    "test": "node scripts/sync-electron.mjs && node tests/smoke.test.mjs && node tests/logic.test.mjs && node tests/scanner.test.mjs",
+    "test": "node scripts/sync-electron.mjs && node tests/smoke.test.mjs && node tests/regex.test.mjs && node tests/logic.test.mjs && node tests/scanner.test.mjs",
     "test:smoke": "node tests/smoke.test.mjs",
+    "test:regex": "node tests/regex.test.mjs",
     "test:logic": "node tests/logic.test.mjs",
     "test:scanner": "node tests/scanner.test.mjs",
     "sync": "node scripts/sync-electron.mjs"
