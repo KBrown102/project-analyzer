@@ -15,7 +15,7 @@ const MAX_SIZE = 300 * 1024;
 // tests/smoke.test.mjs 会核对两处的关键词是否一致，改一处记得改另一处。
 const NOISE_DIR = /^(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release|\.cache|coverage|\.gradle|\.terraform|vendor)$/;
 
-const TEXT_RE = /\.(md|markdown|json|ya?ml|txt|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i;
+const TEXT_RE = /\.(md|markdown|json|ya?ml|txt|log|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i;
 
 /**
  * 扫描目录。

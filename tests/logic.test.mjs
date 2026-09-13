@@ -1122,6 +1122,163 @@ console.log("\n[22] AI 整体总结端到端");
   api.clearAIMemory();
 })();
 
+// ── [23] P2-1: 崩溃日志扫描行为测试 ──────────────────────────────
+{
+  // 造一个带 .log 文件的假项目
+  var tree = {
+    "crash.log": "2026-09-14 10:30:00 ERROR attempt to index global 'PortalUI' (a nil value)\nstack traceback:\n\tmain.lua:140: in main chunk\n",
+    "debug.log": "2026-09-12 08:00:00 FATAL Segmentation fault\n",
+    "error.log": "Traceback (most recent call last):\n  File \"main.py\", line 10, in <module>\nTypeError: 'NoneType' object is not subscriptable\n",
+    "main.lua": "local x = 1\n",
+    "conf.lua": "function love.conf() end\n",
+  };
+  var d = await run(tree, "crashTest", "game");
+
+  C.ok("crashLogs 存在", !!d.crashLogs);
+  C.ok("crashLogs 是数组", Array.isArray(d.crashLogs));
+  C.ok("crashLogs 检出 3 个日志文件", d.crashLogs.length === 3);
+
+  // 每个文件的结构
+  d.crashLogs.forEach(function (log) {
+    C.ok("log.file 是字符串", typeof log.file === "string" && log.file.length > 0);
+    C.ok("log.total > 0", log.total > 0);
+    C.ok("log.hits 是数组", Array.isArray(log.hits));
+    C.ok("log.hits[0] 有 sev", log.hits[0] && typeof log.hits[0].sev === "string");
+    C.ok("log.hits[0] 有 text", log.hits[0] && typeof log.hits[0].text === "string");
+    C.ok("log.hits[0] 有 line", log.hits[0] && typeof log.hits[0].line === "number");
+  });
+
+  // Lua attempt to index 被检测到
+  var luaLog = d.crashLogs.find(function (l) { return l.file.indexOf("crash.log") >= 0; });
+  C.ok("crash.log 被检出", !!luaLog);
+  C.ok("crash.log 含 attempt to index", luaLog && luaLog.hits.some(function (h) { return h.text.indexOf("attempt to index") >= 0; }));
+
+  // FATAL 被检出且严重度正确
+  var debugLog = d.crashLogs.find(function (l) { return l.file.indexOf("debug.log") >= 0; });
+  C.ok("debug.log 被检出", !!debugLog);
+  C.ok("debug.log 含 FATAL", debugLog && debugLog.hits.some(function (h) { return h.sev === "fatal"; }));
+
+  // Python Traceback 被检出
+  var errorLog = d.crashLogs.find(function (l) { return l.file.indexOf("error.log") >= 0; });
+  C.ok("error.log 被检出", !!errorLog);
+  C.ok("error.log 含 TypeError", errorLog && errorLog.hits.some(function (h) { return h.text.indexOf("TypeError") >= 0 || h.text.indexOf("Traceback") >= 0; }));
+
+  // 无 .log 的项目 → crashLogs 为空数组
+  var cleanTree = { "main.lua": "local x = 1\n", "conf.lua": "function love.conf() end\n" };
+  var cleanD = await run(cleanTree, "cleanTest", "game");
+  C.ok("无日志项目 crashLogs 为空", Array.isArray(cleanD.crashLogs) && cleanD.crashLogs.length === 0);
+
+  // crashLogScan 独立调用
+  var texts = [
+    { path: "test.log", text: "panic: runtime error: invalid memory address\n" },
+    { path: "main.lua", text: "local x = 1\n" },
+  ];
+  var scan = api.crashLogScan(texts);
+  C.ok("crashLogScan 独立调用检出 1 个文件", scan.length === 1);
+  C.ok("crashLogScan 不扫非 .log 文件", !scan.find(function (l) { return l.file === "main.lua"; }));
+  C.ok("crashLogScan 检出 panic", scan[0].hits.some(function (h) { return h.text.indexOf("panic") >= 0; }));
+
+  // CRASH_PATTERNS 暴露
+  C.ok("CRASH_PATTERNS 是数组", Array.isArray(api.CRASH_PATTERNS));
+  C.ok("CRASH_PATTERNS >= 10 条", api.CRASH_PATTERNS.length >= 10);
+}
+
+// ── [24] P2-3: 亮点展示 + 总体评级行为测试 ──────────────────────
+{
+  // 完整项目 → 高评级 + 多亮点
+  var fullTree = {
+    "package.json": '{"name":"full","bin":"./cli.js"}',
+    "README.md": "# Full Project\nA complete project with everything.",
+    "src/main.js": "console.log('hello');\n",
+    "src/utils.js": "module.exports = {};\n",
+    "tests/test_main.js": "require('../src/main');\n",
+    "tests/test_utils.js": "require('../src/utils');\n",
+    ".github/workflows/ci.yml": "name: CI\n",
+    "CHANGELOG.md": "## v1.0.0\n",
+  };
+  var d = await run(fullTree, "fullProj", "cli");
+
+  // 亮点
+  C.ok("highlights 存在", !!d.highlights);
+  C.ok("highlights 是数组", Array.isArray(d.highlights));
+  C.ok("highlights > 0", d.highlights.length > 0);
+  // 有 CI 的项目应该有 CI 亮点
+  var hasCIHl = d.highlights.some(function (h) { return h.text.indexOf("CI") >= 0; });
+  C.ok("亮点含 CI", hasCIHl);
+  // 有测试应该有测试亮点
+  var hasTestHl = d.highlights.some(function (h) { return h.text.indexOf("测试") >= 0; });
+  C.ok("亮点含测试", hasTestHl);
+
+  // 评级
+  C.ok("grade 存在", !!d.grade);
+  C.ok("grade.score 是 0-100", d.grade.score >= 0 && d.grade.score <= 100);
+  C.ok("grade.letter 是 A/B/C/D", ["A", "B", "C", "D"].includes(d.grade.letter));
+  C.ok("grade.phRate 是 0-100", d.grade.phRate >= 0 && d.grade.phRate <= 100);
+  C.ok("grade.artRate 是 0-100", d.grade.artRate >= 0 && d.grade.artRate <= 100);
+
+  // 空项目 → 低评级
+  var emptyTree = { "main.lua": "local x = 1\n", "conf.lua": "function love.conf() end\n" };
+  var emptyD = await run(emptyTree, "emptyProj", "game");
+  C.ok("空项目 grade 存在", !!emptyD.grade);
+  C.ok("空项目评级 D 或 C", emptyD.grade.letter === "D" || emptyD.grade.letter === "C");
+  C.ok("空项目 highlights 可能为空", Array.isArray(emptyD.highlights));
+
+  // 有崩溃日志时 crashPenalty > 0
+  var crashTree = {
+    "main.lua": "local x = 1\n",
+    "conf.lua": "function love.conf() end\n",
+    "crash.log": "FATAL Segmentation fault\nERROR attempt to index nil\n",
+  };
+  var crashD = await run(crashTree, "crashProj", "game");
+  C.ok("有崩溃日志时 crashPenalty > 0", crashD.grade.crashPenalty > 0);
+
+  // calcGrade 独立调用
+  var grade = api.calcGrade(d);
+  C.ok("calcGrade 独立调用返回 letter", typeof grade.letter === "string");
+
+  // buildHighlights 独立调用
+  var hl = api.buildHighlights(d);
+  C.ok("buildHighlights 独立调用返回数组", Array.isArray(hl));
+}
+
+// ── [25] P2-2: 可视化 HTML 报告导出行为测试 ─────────────────────
+{
+  var tree = {
+    "package.json": '{"name":"test","bin":"./cli.js"}',
+    "README.md": "# Test\n",
+    "src/main.js": "console.log('hi');\n",
+    "tests/test.js": "require('../src/main');\n",
+    "crash.log": "ERROR something broke\n",
+  };
+  var d = await run(tree, "reportTest", "cli");
+
+  // exportHTMLReportData
+  var r = api.exportHTMLReportData([d]);
+  C.ok("exportHTMLReportData 返回对象", !!r);
+  C.ok("报告含 name", typeof r.name === "string" && r.name.endsWith(".html"));
+  C.ok("报告含 html", typeof r.html === "string" && r.html.length > 500);
+  C.ok("报告 count=1", r.count === 1);
+  C.ok("html 含 DOCTYPE", r.html.indexOf("<!DOCTYPE html>") >= 0);
+  C.ok("html 含项目名", r.html.indexOf("reportTest") >= 0 || r.html.indexOf("test") >= 0);
+  C.ok("html 含阶段进度", r.html.indexOf("阶段进度") >= 0);
+  C.ok("html 含产物清点", r.html.indexOf("产物清点") >= 0);
+  C.ok("html 含评级", r.html.indexOf("总体评级") >= 0);
+  C.ok("html 含崩溃日志", r.html.indexOf("崩溃") >= 0 || r.html.indexOf("crash") >= 0);
+  C.ok("html 含优化建议", r.html.indexOf("优化建议") >= 0 || r.html.indexOf("advice") >= 0);
+  C.ok("html 含 REPORT_CSS 内联样式", r.html.indexOf("<style>") >= 0);
+
+  // 空数组
+  var empty = api.exportHTMLReportData([]);
+  C.ok("空数组返回 null", empty === null);
+
+  // 对比模式
+  var tree2 = { "proj2/package.json": '{"name":"test2"}', "proj2/src/index.js": "console.log(1);\n" };
+  var d2 = await run(tree2, "reportTest2", "lib");
+  var cmp = api.exportHTMLReportData([d, d2]);
+  C.ok("对比模式 count=2", cmp.count === 2);
+  C.ok("对比模式 html 含两个项目", cmp.html.indexOf(d.name) >= 0 && cmp.html.indexOf(d2.name) >= 0);
+}
+
 // ── 汇总 ───────────────────────────────────────────────────────
 console.log(`\n通过 ${C.state.pass} 项，失败 ${C.state.fail} 项`);
 if (C.state.fail > 0) {

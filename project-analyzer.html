@@ -58,6 +58,23 @@
   .gaps ul{margin:6px 0 0 16px}
   .gaps li{margin:2px 0}
   .empty{color:var(--tx3);font-size:13px;padding:8px 0}
+  .grade-box{display:flex;align-items:center;gap:16px;padding:12px 16px;background:var(--panel2);border:1px solid var(--line);border-radius:9px}
+  .grade-letter{font-size:32px;font-weight:700;line-height:1}
+  .grade-score{font-size:24px;font-weight:500;color:var(--tx2)}
+  .grade-breakdown{display:flex;gap:6px;flex-wrap:wrap}
+  .highlights{display:flex;flex-direction:column;gap:4px}
+  .hl-item{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tx2)}
+  .crash-section{display:flex;flex-direction:column;gap:10px}
+  .crash-file{background:rgba(231,76,60,.06);border:1px solid rgba(231,76,60,.15);border-radius:8px;overflow:hidden}
+  .crash-file-head{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px;flex-wrap:wrap}
+  .crash-hits{padding:4px 12px 8px}
+  .crash-hit{font-size:11.5px;font-family:var(--mono);padding:3px 0;color:var(--tx2);display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+  .crash-fatal{border-left:3px solid #e74c3c;padding-left:8px}
+  .crash-error{border-left:3px solid var(--warn);padding-left:8px}
+  .crash-ts{color:var(--tx3);font-size:10.5px}
+  .crash-lang{background:var(--panel2);padding:1px 5px;border-radius:3px;font-size:10px;color:var(--tx3)}
+  .crash-text{flex:1;word-break:break-all;color:var(--tx2)}
+  .crash-line{color:var(--tx3);font-size:10.5px;white-space:nowrap}
   .intro{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:13px 15px}
   .ititle{font-size:15px;font-weight:500;margin-bottom:5px}
   .ibody{color:var(--tx2);font-size:12.5px;line-height:1.7}
@@ -179,7 +196,7 @@
     <button id="btnB">选择项目 B（对比用）</button>
     <button id="btnClear">清空</button>
     <button id="btnHistory">历史</button>
-    <button id="btnExportJSON">导出 JSON</button>
+    <button id="btnExportHTML">导出报告</button>
     <button id="btnAISettings">AI 设置</button>
     <div class="mode">
       <button id="mSingle" class="on">单项目</button>
@@ -268,7 +285,7 @@
   var REGEXES = {
     // —— 顶层共享正则（原 var 常量）——
     noise:    /(^|\/)(node_modules|\.git|\.svn|dist(-.*)?|build|win-unpacked|linux-unpacked|mac|nsis|portable|\.next|out(-.*)?|target|bin|obj|venv|__pycache__|\.idea|\.vscode|Library|Temp|Logs|release|\.cache|coverage|\.gradle|\.terraform|vendor)(\/|$)/,
-    textFile: /\.(md|markdown|json|ya?ml|txt|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i,
+    textFile: /\.(md|markdown|json|ya?ml|txt|log|lua|js|mjs|cjs|py|gd|cs|ts|html|css|sh|toml|ini|cfg)$/i,
     testDir:  /(^|\/)(test|tests|spec|__tests__)\/|\.(test|spec)\.|test-strategy/i,
     ci:       /\.github\/workflows|gitlab-ci|\.gitlab-ci|azure-pipelines|Jenkinsfile/i,
     readme:   /README/i,
@@ -1628,13 +1645,122 @@
       boundary: c.boundary || null,
       phases: detectPhases(paths, prof, texts),
       artifacts: detectArtifacts(paths, prof, texts),
-      eng: detectEngineering(paths, texts)
+      eng: detectEngineering(paths, texts),
+      crashLogs: crashLogScan(texts)
     };
     d.has = {};
     d.artifacts.forEach(function(a){ d.has[a.key] = a.has; });
     d.intro = genIntro(paths, texts, type);
     d.advice = prof.advice(d);
+    d.highlights = buildHighlights(d);
+    d.grade = calcGrade(d);
     return d;
+  }
+
+  // —— P2-1：崩溃/错误日志扫描 ——
+  var CRASH_PATTERNS = [
+    { re: /attempt to (?:index|call|concatenate|perform arithmetic on)[^\n]*(?:nil|a \w+ value)/gi, sev: "error", lang: "lua" },
+    { re: /stack traceback:[\s\S]*?(?=\n\n|\n$|$)/gi, sev: "error", lang: "lua" },
+    { re: /Traceback \(most recent call last\):[\s\S]*?(?=\n\n|\n$|$)/gi, sev: "error", lang: "python" },
+    { re: /(?:TypeError|ReferenceError|SyntaxError|RangeError):[^\n]+/gi, sev: "error", lang: "js" },
+    { re: /UnhandledPromiseRejection(?:Warning)?:[^\n]+/gi, sev: "error", lang: "js" },
+    { re: /Exception in thread[^\n]+/gi, sev: "error", lang: "java" },
+    { re: /(?:NullPointerException|IllegalArgumentException|IllegalStateException)[^\n]*/gi, sev: "error", lang: "java" },
+    { re: /panic:[^\n]+/gi, sev: "error", lang: "go" },
+    { re: /thread 'main' panicked at[^\n]+/gi, sev: "error", lang: "rust" },
+    { re: /FATAL[^\n]+/gi, sev: "fatal", lang: "general" },
+    { re: /SEGFAULT|Segmentation fault[^\n]*/gi, sev: "fatal", lang: "general" }
+  ];
+
+  function crashLogScan(texts){
+    var logs = [];
+    for (var i = 0; i < texts.length; i++){
+      var t = texts[i];
+      if (!/\.log$/i.test(t.path)) continue;
+      var lines = t.text.split("\n");
+      var hits = [];
+      var seenLines = {};
+      for (var li = 0; li < lines.length; li++){
+        var line = lines[li];
+        for (var pi = 0; pi < CRASH_PATTERNS.length; pi++){
+          var m = CRASH_PATTERNS[pi].re.exec(line);
+          if (!m) continue;
+          var raw = m[0];
+          if (/traceback/i.test(raw) && li + 1 < lines.length){
+            for (var ni = li + 1; ni < lines.length; ni++){
+              if (lines[ni].trim() === "" || /^[^\s]/.test(lines[ni])) break;
+              raw += "\n" + lines[ni];
+            }
+          }
+          var key = raw.replace(/\s+/g, " ").trim().slice(0, 200);
+          if (seenLines[key]) break;
+          seenLines[key] = true;
+          var tsMatch = line.match(/(\d{4}[-/]\d{2}[-/]\d{2}[\s T]\d{2}:\d{2}:\d{2})/);
+          hits.push({
+            line: li + 1, sev: CRASH_PATTERNS[pi].sev, lang: CRASH_PATTERNS[pi].lang,
+            text: raw.replace(/\s+/g, " ").trim().slice(0, 300),
+            ts: tsMatch ? tsMatch[1] : null
+          });
+          break;
+        }
+      }
+      if (hits.length){
+        hits.sort(function(a, b){ var o={fatal:0,error:1}; return (o[a.sev]||2)-(o[b.sev]||2); });
+        logs.push({ file: t.path, total: hits.length,
+          fatal: hits.filter(function(h){return h.sev==="fatal";}).length,
+          errors: hits.filter(function(h){return h.sev==="error";}).length,
+          hits: hits.slice(0, 15) });
+      }
+    }
+    logs.sort(function(a, b){ return b.total - a.total; });
+    return logs;
+  }
+
+  // —— P2-3：工程亮点清单 ——
+  function buildHighlights(d){
+    var hl = [];
+    var phDone = d.phases.list.filter(function(p){ return p.done; }).length;
+    var phTotal = d.phases.list.length;
+    if (phDone >= phTotal * 0.8) hl.push({ icon: "ok", text: "阶段流程完成度高（" + phDone + "/" + phTotal + "）" });
+    var hitArt = d.artifacts.filter(function(a){ return a.has; }).length;
+    var totArt = d.artifacts.length;
+    if (hitArt >= totArt * 0.7) hl.push({ icon: "ok", text: "核心产物齐全（" + hitArt + "/" + totArt + "）" });
+    if (d.eng.ci) hl.push({ icon: "ok", text: "CI 流水线已配置" });
+    if (d.eng.test) hl.push({ icon: "ok", text: "有测试文件（" + d.eng.test + "）" });
+    if (d.eng.readme) hl.push({ icon: "ok", text: "有 README 文档" });
+    if (d.intro && d.intro.fromDoc) hl.push({ icon: "ok", text: "有可读的项目说明文档" });
+    if (d.eng.pkg && d.eng.scripts && d.eng.scripts.length >= 3) hl.push({ icon: "ok", text: "npm scripts 丰富（" + d.eng.scripts.length + " 条）" });
+    return hl;
+  }
+
+  // —— P2-3：总体工程成熟度评级 ——
+  function calcGrade(d){
+    var phDone = d.phases.list.filter(function(p){ return p.done; }).length;
+    var phTotal = d.phases.list.length;
+    var phRate = phTotal > 0 ? phDone / phTotal : 0;
+    var hitArt = d.artifacts.filter(function(a){ return a.has; }).length;
+    var totArt = d.artifacts.length;
+    var artRate = totArt > 0 ? hitArt / totArt : 0;
+    var engScore = 0;
+    if (d.eng.ci) engScore += 0.5;
+    if (d.eng.test) engScore += 0.3;
+    if (d.eng.readme) engScore += 0.2;
+    var crashPenalty = 0;
+    if (d.crashLogs && d.crashLogs.length){
+      var totalCrashes = d.crashLogs.reduce(function(s, l){ return s + l.total; }, 0);
+      crashPenalty = Math.min(totalCrashes * 3, 20);
+    }
+    var score = Math.round((phRate * 40 + artRate * 35 + engScore * 25) - crashPenalty);
+    if (score < 0) score = 0;
+    if (score > 100) score = 100;
+    var letter, color;
+    if (score >= 80) { letter = "A"; color = "var(--ok)"; }
+    else if (score >= 60) { letter = "B"; color = "var(--warn)"; }
+    else if (score >= 40) { letter = "C"; color = "#e67e22"; }
+    else { letter = "D"; color = "var(--danger)"; }
+    return { score: score, letter: letter, color: color,
+             phRate: Math.round(phRate * 100), artRate: Math.round(artRate * 100),
+             engScore: Math.round(engScore * 100), crashPenalty: crashPenalty };
   }
 
   // —— 目录名 → 用途（用于无文档时从结构推断项目在干什么）——
@@ -2510,6 +2636,45 @@
     h += '<div class="row"><i class="dot ' + (d.eng.readme ? "ok" : "no") + '"></i><span class="n">README</span><span class="v">' + (d.eng.readme ? "有" : "缺") + '</span></div>';
     if (d.eng.pkg) h += '<div class="row"><i class="dot ok"></i><span class="n">npm scripts</span><span class="v">' + esc(d.eng.scripts.join(", ") || "无") + '</span></div>';
 
+    if (d.grade){
+      h += '<h3>总体评级</h3>';
+      h += '<div class="grade-box">';
+      h += '<div class="grade-letter" style="color:' + d.grade.color + '">' + d.grade.letter + '</div>';
+      h += '<div class="grade-score">' + d.grade.score + '<span style="font-size:12px;color:var(--tx3)">/100</span></div>';
+      h += '<div class="grade-breakdown">';
+      h += '<span class="tag">阶段 ' + d.grade.phRate + '%</span>';
+      h += '<span class="tag">产物 ' + d.grade.artRate + '%</span>';
+      h += '<span class="tag">工程 ' + d.grade.engScore + '%</span>';
+      if (d.grade.crashPenalty > 0) h += '<span class="tag" style="color:var(--danger)">崩溃扣 -' + d.grade.crashPenalty + '</span>';
+      h += '</div></div>';
+    }
+    if (d.highlights && d.highlights.length){
+      h += '<h3>工程亮点</h3><div class="highlights">';
+      d.highlights.forEach(function(hl){ h += '<div class="hl-item"><i class="dot ok"></i><span>' + esc(hl.text) + '</span></div>'; });
+      h += '</div>';
+    }
+    if (d.crashLogs && d.crashLogs.length){
+      var totalCrash = d.crashLogs.reduce(function(s, l){ return s + l.total; }, 0);
+      h += '<h3>崩溃 / 错误日志（' + totalCrash + ' 条）</h3><div class="crash-section">';
+      d.crashLogs.forEach(function(log){
+        h += '<div class="crash-file"><div class="crash-file-head"><i class="dot no"></i><b>' + esc(log.file) + '</b>';
+        h += '<span class="tag" style="color:var(--danger)">' + log.total + ' 条</span>';
+        if (log.fatal) h += '<span class="tag" style="color:#e74c3c">FATAL ' + log.fatal + '</span>';
+        if (log.errors) h += '<span class="tag" style="color:var(--warn)">ERROR ' + log.errors + '</span>';
+        h += '</div><div class="crash-hits">';
+        log.hits.forEach(function(hit){
+          var sevCls = hit.sev === "fatal" ? "crash-fatal" : "crash-error";
+          h += '<div class="crash-hit ' + sevCls + '">';
+          if (hit.ts) h += '<span class="crash-ts">' + esc(hit.ts) + '</span> ';
+          h += '<span class="crash-lang">' + esc(hit.lang) + '</span> ';
+          h += '<span class="crash-text">' + esc(hit.text) + '</span>';
+          h += '<span class="crash-line">L' + hit.line + '</span></div>';
+        });
+        h += '</div></div>';
+      });
+      h += '</div>';
+    }
+
     var gaps = d.artifacts.filter(function(a){ return !a.has; }).map(function(a){ return a.label; });
     if (!d.eng.ci) gaps.push("CI 流水线");
     if (!d.eng.test) gaps.push("测试");
@@ -2766,9 +2931,113 @@
 
   // 绑定导出按钮（script 在 body 末尾，DOM 已就绪）
   (function(){
-    var b = document.getElementById("btnExportJSON");
-    if (b) b.onclick = exportJSON;
+    var bh = document.getElementById("btnExportHTML");
+    if (bh) bh.onclick = exportHTMLReport;
   })();
+
+  // —— P2-2：可视化 HTML 报告导出 ——
+  function exportHTMLReportData(items){
+    items = items || [A, B].filter(Boolean);
+    if (!items.length) return null;
+    var ts = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    var fname = "pa-report-" + items.map(function(d){ return d.name; }).join("-vs-") + "-" + ts + ".html";
+    var projectsHtml = items.map(renderReportProject).join("\n");
+    var title = items.length === 1 ? items[0].name : items.map(function(d){ return d.name; }).join(" vs ");
+    var html = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n<meta charset="UTF-8">\n';
+    html += '<meta name="viewport" content="width=device-width,initial-scale=1.0">\n';
+    html += '<title>项目结构分析报告 - ' + esc(title) + '</title>\n' + REPORT_CSS + '</head>\n<body>\n<div class="container">\n';
+    html += '<h1>项目结构分析报告</h1>\n<p class="subtitle">' + esc(title) + ' · 生成于 ' + new Date().toLocaleString("zh-CN") + '</p>\n';
+    html += projectsHtml;
+    html += '<div class="footer">由项目结构分析器 v1.0.0 生成</div>\n</div>\n</body>\n</html>';
+    return { name: fname, html: html, count: items.length };
+  }
+  function renderReportProject(d){
+    var h = '<div class="card">\n<h2>' + esc(d.name) + '</h2>\n<div class="stats-row">\n';
+    h += statBox(d.grade ? d.grade.letter : "—", "总体评级", d.grade ? d.grade.color : "#888");
+    h += statBox(d.files, "文件数", "#3498db");
+    var phDone = d.phases.list.filter(function(p){ return p.done; }).length;
+    h += statBox(phDone + "/" + d.phases.list.length, "阶段完成", "#2ecc71");
+    var hitArt = d.artifacts.filter(function(a){ return a.has; }).length;
+    h += statBox(hitArt + "/" + d.artifacts.length, "产物命中", "#f39c12");
+    h += '</div>\n<div class="meta-line"><b>模板：</b>' + esc(d.profileName) + ' · <b>类型：</b>' + esc(d.type) + '</div>\n';
+    if (d.grade){
+      h += '<div class="grade-detail">';
+      h += '<span class="tag">阶段 ' + d.grade.phRate + '%</span><span class="tag">产物 ' + d.grade.artRate + '%</span><span class="tag">工程 ' + d.grade.engScore + '%</span>';
+      if (d.grade.crashPenalty > 0) h += '<span class="tag fatal">崩溃扣 -' + d.grade.crashPenalty + '</span>';
+      h += '</div>\n';
+    }
+    if (d.highlights && d.highlights.length){
+      h += '<h3>工程亮点</h3>\n<ul class="hl-list">\n';
+      d.highlights.forEach(function(hl){ h += '<li>' + esc(hl.text) + '</li>\n'; });
+      h += '</ul>\n';
+    }
+    h += '<h3>阶段进度</h3>\n<div class="phases-grid">\n';
+    d.phases.list.forEach(function(p){
+      var cls = p.done ? "done" : (p.cur ? "cur" : "todo");
+      h += '<div class="phase-cell ' + cls + '"><div class="phase-id">' + p.id + '</div><div class="phase-name">' + esc(p.name) + '</div>';
+      if (p.evidence) h += '<div class="phase-ev">' + esc(p.evidence) + '</div>';
+      h += '</div>\n';
+    });
+    h += '</div>\n<h3>产物清点</h3>\n<table>\n<tr><th>产物</th><th>状态</th><th>详情</th></tr>\n';
+    d.artifacts.forEach(function(a){
+      h += '<tr><td>' + esc(a.label) + '</td><td class="' + (a.has ? "ok" : "no") + '">' + (a.has ? "有" : "缺") + '</td><td>' + (a.has ? (a.count > 1 ? a.count + " 处" : "1 处") : "—") + '</td></tr>\n';
+    });
+    h += '</table>\n<h3>工程化</h3>\n<table>\n<tr><th>项目</th><th>状态</th></tr>\n';
+    h += tr("CI 流水线", d.eng.ci ? "有" : "缺", d.eng.ci);
+    h += tr("测试文件", d.eng.test ? String(d.eng.test) : "缺", !!d.eng.test);
+    h += tr("README", d.eng.readme ? "有" : "缺", !!d.eng.readme);
+    if (d.eng.pkg) h += tr("npm scripts", d.eng.scripts.join(", ") || "无", true);
+    h += '</table>\n';
+    if (d.crashLogs && d.crashLogs.length){
+      var totalCrash = d.crashLogs.reduce(function(s, l){ return s + l.total; }, 0);
+      h += '<h3>崩溃 / 错误日志（' + totalCrash + ' 条）</h3>\n';
+      d.crashLogs.forEach(function(log){
+        h += '<div class="crash-block">\n<div class="crash-head">' + esc(log.file) + ' <span class="tag fatal">' + log.total + ' 条</span></div>\n<div class="crash-list">\n';
+        log.hits.forEach(function(hit){
+          var sevCls = hit.sev === "fatal" ? "sev-fatal" : "sev-error";
+          h += '<div class="crash-line ' + sevCls + '">';
+          if (hit.ts) h += '<span class="ts">' + esc(hit.ts) + '</span> ';
+          h += '<span class="lang">' + esc(hit.lang) + '</span> ' + esc(hit.text) + ' <span class="ln">L' + hit.line + '</span></div>\n';
+        });
+        h += '</div>\n</div>\n';
+      });
+    }
+    var gaps = d.artifacts.filter(function(a){ return !a.has; }).map(function(a){ return a.label; });
+    if (!d.eng.ci) gaps.push("CI 流水线");
+    if (!d.eng.test) gaps.push("测试");
+    if (gaps.length){
+      h += '<h3>缺口（' + gaps.length + ' 项）</h3>\n<ul class="gap-list">\n';
+      gaps.forEach(function(g){ h += '<li>' + esc(g) + '</li>\n'; });
+      h += '</ul>\n';
+    }
+    if (d.advice && d.advice.length){
+      h += '<h3>优化建议（按优先级）</h3>\n';
+      d.advice.forEach(function(a){
+        h += '<div class="advice-item pri-' + a.pri.toLowerCase() + '">\n<div class="advice-head"><span class="pri">' + a.pri + '</span><b>' + esc(a.title) + '</b></div>\n';
+        h += '<div class="advice-detail">' + esc(a.detail) + '</div>\n<div class="advice-why">为什么：' + esc(a.why) + '</div>\n</div>\n';
+      });
+    }
+    h += '</div>\n';
+    return h;
+  }
+  function statBox(val, label, color){
+    return '<div class="stat-box" style="border-color:' + color + '33"><div class="stat-val" style="color:' + color + '">' + (typeof val === "string" ? esc(val) : val) + '</div><div class="stat-lbl">' + esc(label) + '</div></div>\n';
+  }
+  function tr(k, v, ok){
+    return '<tr><td>' + esc(k) + '</td><td class="' + (ok ? "ok" : "no") + '">' + esc(v) + '</td></tr>\n';
+  }
+  var REPORT_CSS = '<style>\n*{margin:0;padding:0;box-sizing:border-box}\nbody{font-family:"Microsoft YaHei","Noto Sans CJK SC",sans-serif;background:#f0f2f5;color:#333;line-height:1.6;padding:30px 20px}\n.container{max-width:900px;margin:0 auto}\nh1{font-size:24px;color:#1a1a2e;margin-bottom:4px}\n.subtitle{color:#888;font-size:13px;margin-bottom:30px}\n.card{background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:24px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,.06)}\nh2{font-size:18px;color:#1a1a2e;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #e94560}\nh3{font-size:14px;color:#e94560;margin:20px 0 10px}\n.stats-row{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}\n.stat-box{flex:1;min-width:100px;background:#fafafa;border:1px solid #e0e0e0;border-radius:8px;padding:12px;text-align:center}\n.stat-val{font-size:22px;font-weight:700}\n.stat-lbl{font-size:11px;color:#888;margin-top:4px}\n.meta-line{font-size:13px;color:#666;margin-bottom:12px}\n.meta-line b{color:#333}\n.grade-detail{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}\n.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#f0f0f0;color:#666}\n.tag.fatal{background:#fde8e8;color:#e74c3c}\n.hl-list{list-style:none;padding-left:0}\n.hl-list li{padding:4px 0 4px 20px;position:relative;font-size:13px;color:#333}\n.hl-list li:before{content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:50%;background:#2ecc71}\n.phases-grid{display:flex;flex-wrap:wrap;gap:8px}\n.phase-cell{flex:1;min-width:100px;padding:10px;border-radius:8px;border:1px solid #e0e0e0;text-align:center}\n.phase-cell.done{background:#e8f8ef;border-color:#2ecc71}\n.phase-cell.cur{background:#fff4e0;border-color:#f39c12}\n.phase-cell.todo{background:#f8f8f8;border-color:#ddd}\n.phase-id{font-size:18px;font-weight:700;color:#333}\n.phase-name{font-size:11px;color:#888;margin-top:4px}\n.phase-ev{font-size:10px;color:#aaa;margin-top:4px;word-break:break-all}\ntable{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}\nth{background:#f5f5f5;padding:8px 12px;text-align:left;font-weight:600;color:#333;border-bottom:2px solid #e0e0e0}\ntd{padding:8px 12px;border-bottom:1px solid #f0f0f0}\ntd.ok{color:#2ecc71;font-weight:500}\ntd.no{color:#e74c3c}\n.crash-block{background:#fef5f5;border:1px solid #fde8e8;border-radius:8px;margin-bottom:8px;overflow:hidden}\n.crash-head{padding:8px 12px;font-size:12px;font-weight:500;border-bottom:1px solid #fde8e8}\n.crash-list{padding:4px 12px 8px}\n.crash-line{font-size:12px;font-family:Consolas,monospace;padding:3px 0;color:#555;border-left:3px solid #e74c3c;padding-left:8px;margin:2px 0}\n.crash-line.sev-error{border-left-color:#f39c12}\n.crash-line .ts{color:#aaa;font-size:10px}\n.crash-line .lang{background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:10px}\n.crash-line .ln{color:#aaa;font-size:10px}\n.gap-list{padding-left:20px;font-size:13px}\n.gap-list li{color:#e67e22;margin:3px 0}\n.advice-item{background:#fafafa;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin-bottom:8px}\n.advice-head{display:flex;align-items:center;gap:8px;margin-bottom:5px}\n.advice-head .pri{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}\n.advice-item.pri-p0 .pri{background:#e74c3c;color:#fff}\n.advice-item.pri-p1 .pri{background:#f39c12;color:#fff}\n.advice-item.pri-p2 .pri{background:#3498db;color:#fff}\n.advice-item.pri-p3 .pri{background:#95a5a6;color:#fff}\n.advice-head b{font-size:13px}\n.advice-detail{font-size:12px;color:#666;margin-bottom:4px}\n.advice-why{font-size:11px;color:#999}\n.footer{text-align:center;color:#aaa;font-size:12px;margin-top:30px}\n@media(max-width:600px){.stats-row{flex-direction:column}.phase-cell{min-width:80px}}\n</style>\n';
+  function exportHTMLReport(){
+    var r = exportHTMLReportData();
+    if (!r) { toast("还没有可导出的项目"); return; }
+    var blob = new Blob([r.html], { type: "text/html;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = r.name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("已导出 " + r.count + " 个项目的 HTML 报告");
+  }
 
   function currentData(label){ return label === "A" ? A : B; }
 
@@ -3573,6 +3842,9 @@
     snapshotFromData: snapshotFromData, updateHistoryBadge: updateHistoryBadge,
     // P2 方向 3：JSON 导出（供测试序列化逻辑，不含 Blob/URL 依赖）
     exportJSONData: exportJSONData,
+    exportHTMLReportData: exportHTMLReportData,
+    crashLogScan: crashLogScan, CRASH_PATTERNS: CRASH_PATTERNS,
+    buildHighlights: buildHighlights, calcGrade: calcGrade,
     // P3：AI 辅助分析（配置/调用/记忆/解析，供测试）
     loadAIConfig: loadAIConfig, saveAIConfig: saveAIConfig,
     callAI: callAI, loadPrompt: loadPrompt, parseAIJSON: parseAIJSON,

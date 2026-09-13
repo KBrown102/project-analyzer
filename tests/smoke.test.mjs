@@ -141,11 +141,10 @@ assert("onLoaded 接入了 updateHistoryBadge()", /updateHistoryBadge\(\)/.test(
 assert("localStorage 降级守卫 HAS_LS", /HAS_LS/.test(html));
 
 // ---------- P2 方向 3：JSON 导出结构 ----------
-assert("exportJSONData 暴露为函数", typeof api.exportJSONData === "function");
-assert("exportJSON 函数已定义", /function exportJSON\(\)/.test(html));
-assert("exportJSONData 函数已定义", /function exportJSONData\(/.test(html));
-assert("顶部有导出 JSON 按钮 btnExportJSON", /id="btnExportJSON"/.test(html));
-assert("导出按钮已绑定 onclick", /getElementById\("btnExportJSON"\)/.test(html));
+assert("exportJSONData 暴露为函数（底层 API 保留，UI 按钮已移除）", typeof api.exportJSONData === "function");
+assert("exportJSON 函数已定义（底层保留）", /function exportJSON\(\)/.test(html));
+assert("exportJSONData 函数已定义（底层保留）", /function exportJSONData\(/.test(html));
+assert("UI 已移除导出 JSON 按钮", !/id="btnExportJSON"/.test(html));
 assert("exportJSONData 已通过 __PA 暴露", typeof api.exportJSONData === "function");
 
 // ---------- P3：AI 辅助分析结构 ----------
@@ -196,6 +195,44 @@ assert("aiSummary 函数已定义", /function\s+aiSummary\s*\(/.test(html));
 assert("showAISummary 函数已定义", /function\s+showAISummary\s*\(/.test(html));
 assert("AI 总结按钮 data-act=\"ai-summary\" 存在", /data-act="ai-summary"/.test(html));
 assert("ai-summary 事件委托已绑定", /t\.dataset\.act\s*===\s*"ai-summary"/.test(html));
+
+// ---------- P2 新增功能结构断言 ----------
+// P2-1: 崩溃日志扫描
+assert("crashLogScan 函数已定义", /function\s+crashLogScan\s*\(/.test(html));
+assert("CRASH_PATTERNS 数组已定义", /var\s+CRASH_PATTERNS\s*=/.test(html));
+assert("crashLogScan 已通过 __PA 暴露", /crashLogScan:\s*crashLogScan/.test(html));
+assert("CRASH_PATTERNS 已通过 __PA 暴露", /CRASH_PATTERNS:\s*CRASH_PATTERNS/.test(html));
+assert("buildData 含 crashLogs 字段", /crashLogs:\s*crashLogScan/.test(html));
+assert("renderCard 含崩溃日志渲染", /crash-section/.test(html));
+assert("CRASH_PATTERNS 含 Lua attempt to index", html.includes("attempt to (?:index"));
+assert("CRASH_PATTERNS 含 Python Traceback", html.includes("Traceback \\(most recent call last"));
+assert("CRASH_PATTERNS 含 JS TypeError", html.includes("TypeError|ReferenceError"));
+assert("CRASH_PATTERNS 含 panic", html.includes("panic:"));
+assert("CRASH_PATTERNS 含 FATAL", html.includes("FATAL"));
+
+// P2-2: 可视化 HTML 报告导出
+assert("exportHTMLReport 函数已定义", /function\s+exportHTMLReport\s*\(/.test(html));
+assert("exportHTMLReportData 函数已定义", /function\s+exportHTMLReportData\s*\(/.test(html));
+assert("renderReportProject 函数已定义", /function\s+renderReportProject\s*\(/.test(html));
+assert("REPORT_CSS 变量已定义", /var\s+REPORT_CSS\s*=/.test(html));
+assert("exportHTMLReportData 已通过 __PA 暴露", /exportHTMLReportData:\s*exportHTMLReportData/.test(html));
+assert("顶部有导出报告按钮 btnExportHTML", /id="btnExportHTML"/.test(html));
+assert("导出报告按钮已绑定 onclick", /exportHTMLReport/.test(html.match(/btnExportHTML[\s\S]*?onclick\s*=\s*exportHTMLReport/)?.[0] || ""));
+assert("REPORT_CSS 含卡片样式", /\.card\{/.test(html));
+assert("REPORT_CSS 含进度阶段样式", /\.phase-cell/.test(html));
+assert("REPORT_CSS 含崩溃日志样式", /\.crash-block/.test(html));
+
+// P2-3: 亮点展示 + 总体评级
+assert("buildHighlights 函数已定义", /function\s+buildHighlights\s*\(/.test(html));
+assert("calcGrade 函数已定义", /function\s+calcGrade\s*\(/.test(html));
+assert("buildHighlights 已通过 __PA 暴露", /buildHighlights:\s*buildHighlights/.test(html));
+assert("calcGrade 已通过 __PA 暴露", /calcGrade:\s*calcGrade/.test(html));
+assert("buildData 含 highlights 字段", /d\.highlights\s*=\s*buildHighlights/.test(html));
+assert("buildData 含 grade 字段", /d\.grade\s*=\s*calcGrade/.test(html));
+assert("renderCard 含总体评级渲染", /grade-box/.test(html));
+assert("renderCard 含工程亮点渲染", /highlights/.test(html));
+assert("calcGrade 含 A/B/C/D 分级", /letter\s*=\s*"A"/.test(html));
+assert("calcGrade 含崩溃扣分逻辑", /crashPenalty/.test(html));
 
 // ---------- 文档 ----------
 assert("README.md exists", fs.existsSync(path.join(root, "README.md")));
