@@ -1,6 +1,6 @@
 # 项目结构分析器
 
-一个独立的本地工具项目：读取你选的项目目录，判断它是什么类型、流程卡在哪一步、缺哪些关键文件，并给出下一步建议。也附带把它变成桌面快捷方式 / 独立 exe 的打包脚本。
+一个独立的本地工具项目：读取你选的项目目录，判断它是什么类型、流程卡在哪一步、缺哪些关键文件，并给出下一步建议。也附带把它打包成独立 exe 的脚本。
 
 ## 这个工具干什么
 
@@ -236,11 +236,59 @@
 
 双击 `project-analyzer.html`，点「选择项目 A」，选一个目录。
 
+### 想要独立窗口：用本机 Electron 起
+
+双击 `run.bat`。它不打包、不下载，只是找到本机已装的 Electron 直接启动分析器，适合想要独立窗口但不想等打包的场景。
+
 ### 想要独立 exe：拷给别人用
 
 双击 `build-exe-electron.bat`。会把 Chromium 一起打进去，成品约 80–120MB，拷到任何 Windows 电脑都能跑。
 
 需要装 Node.js，首次运行要联网下载依赖，国内源已经配好了（npmmirror 镜像），慢慢等几分钟。打包脚本会自动同步 `project-analyzer.html` 和 `prompts/` 到 `build-electron/`，不需要手动跑 `npm run sync`。
+
+### 改版本号
+
+版本号是「单一数据源 + 自动同步」：**唯一源是根 `package.json` 的 `version`**，改一次会自动写到所有该出现的地方。
+
+| 位置 | 作用 |
+|---|---|
+| `package.json` | 唯一数据源 |
+| `build-electron/package.json` | electron-builder 靠它决定 exe 文件名与 EXE 属性里的版本 |
+| `project-analyzer.html` | 导出报告页脚的「由项目结构分析器 v1.0.0 生成」水印 |
+| `build-electron/project-analyzer.html` | 上一项的副本 |
+
+两种改法，任选其一：
+
+```bash
+# 1) 双击（推荐，不打包，纯改版本号）
+设置版本号.bat
+
+# 2) 命令行
+npm run version:set 1.1.0
+```
+
+不带参数运行会打印当前版本号。版本号必须是 `x.y.z` 形式，可带预发布后缀（如 `1.2.3-beta.1`）；写成 `1.2`、`abc`、`v1.0.0` 会被拒绝并保持文件不变。
+
+`build-exe-electron.bat` 在打包前也会问一次版本号（直接回车就沿用当前版本），所以「改版本 → 打 exe」一条链路不用来回切脚本。
+
+`build-electron/package-lock.json` 里的版本号由 npm 自己维护，不用手动改，下次 `npm install` 会自动跟随。exe 文件名（`artifactName`）已经写成 `project-analyzer-${version}.${ext}`，会自动跟随新版本号。
+
+### 改 bat 脚本的注意事项
+
+本项目所有 `.bat` 统一采用 **「UTF-8 无 BOM 文件 + `chcp 65001`」** 组合。改的时候有三条硬性约定，别踩：
+
+1. **文件编码必须和 `chcp` 码页配对**。本项目的约定是：文件存 UTF-8（无 BOM），脚本第一行逻辑代码写 `chcp 65001 >nul`。
+   - 若文件是 UTF-8 而 `chcp` 是 936 → 控制台输出全部乱码（如 `褰撳墠鐗堟湰`）。
+   - 若文件是 GBK 而 `chcp` 是 65001 → 同样乱码。
+   - 两者必须一致，这是乱码问题的唯一根因。
+2. **行尾必须是 CRLF**（不能是 LF）。用某些编辑器保存成 LF 后，`cmd.exe` 会按字节偏移解析，出现 `'OOT'`、`'zer.html'` 这类错位报错，**且退出码仍是 0**，属于静默失败。
+3. **每条中文行末尾要补一个 ASCII 尾标记**（当前统一用 `" ##"`）。`cmd.exe` 在按码页解析行时，中文行最后一个字节可能落在多字节序列的前导字节区，会把紧随的 `\r` 当成该字的第二字节吞掉，导致这一行和下一行粘连。
+
+> ⚠️ **绝不要用「UTF-8 读进来、UTF-8 写回去」的方式批量改这些 bat。**
+> 如果文件当前是 GBK，这种写法会把每个汉字变成 U+FFFD（`ef bf bd`），**不可逆**。
+> 正确做法：先用 `new TextDecoder("gbk").decode(buf)` 解码，再按 UTF-8 写出；或直接从 git 取原始字节。
+
+这三条都有字节级测试兜着（`tests/version.test.mjs` 的 bat 编解码断言组：CRLF / 孤立 LF / 中文结尾行 / U+FFFD / 严格 UTF-8 解码 / chcp 值），改坏了跑 `npm test` 会红。
 
 ### 清理打包产物
 
@@ -252,8 +300,9 @@
 项目结构分析器-1.0.0/
 ├── project-analyzer.html     分析器本体，单文件零依赖（约 3750 行）
 ├── package.json              测试与同步脚本入口
-├── build-exe-electron.bat    打包成独立 exe（自动同步 html + prompts）
+├── build-exe-electron.bat    打包成独立 exe（打包前问版本号，自动同步 html + prompts）
 ├── clean-build.bat           清理打包产物与全局缓存
+├── 设置版本号.bat             单独改版本号（不打包），同步到全部 4 处
 ├── run.bat                   不打包，直接起 Electron 预览
 ├── assets/                   图标 icon.ico / icon.png 与生成脚本 make-icon.py
 ├── prompts/                  AI 提示词文件（5 个 .md，可编辑调 AI 行为）
@@ -274,12 +323,14 @@
 ├── docs/
 │   └── config.md             配置说明
 ├── scripts/
-│   └── sync-electron.mjs     同步根 html + prompts/ 到 build-electron/
+│   ├── sync-electron.mjs     同步根 html + prompts/ 到 build-electron/
+│   └── set-version.mjs       版本号单一数据源，一次同步全部 4 处
 └── tests/
     ├── smoke.test.mjs        文件与资产检查（静态断言，含 prompts 副本一致性 + userData 隔离）
     ├── regex.test.mjs        正则提前闭合守护
     ├── logic.test.mjs        分析逻辑行为测试（真跑 analyze，含 AI 校验/总结/记忆）
     ├── scanner.test.mjs      Electron 目录扫描测试（真扫临时目录）
+    ├── version.test.mjs      版本号同步测试（改完自动还原仓库文件）
     └── _harness.mjs          把 <script> 抽出来在 Node vm 里执行的加载器
 ```
 
@@ -288,7 +339,7 @@
 分析器是单文件，改完 `project-analyzer.html` 直接刷新浏览器就能看效果，没有构建步骤。但有三件事别忘了：
 
 ```bash
-npm test          # smoke + regex + logic + scanner，852 项断言
+npm test          # smoke + regex + logic + scanner + version，1003 项断言
 npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出来的是旧版
 ```
 
@@ -321,6 +372,7 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 - 两版噪音目录列表逐词比对（各 28 个），防止两边漂移导致结果不一致
 - **AI 模块**（P3）：`loadAIConfig` / `saveAIConfig` 默认值与持久化、`callAI` 失败降级不阻断主功能、`loadPrompt` 占位符注入与 fallback、`parseAIJSON` 解析带围栏的 JSON、每步校验 / 整体总结的输入构造、记忆滚动 50 条与导出分组
 - **打包配置**（P4）：`build-electron/prompts/` 5 个文件存在且与根字节一致、`package.json files` 含 `prompts/**`、`main.js` 显式 `setPath` userData
+- **版本号同步**：合法号三处（实际四处）都改到、非法号被拒且文件零改动、幂等重设不报错、替换只动 `APP_VERSION` 声明不动正文其它 `1.0.0`、`devDependencies` 不被波及。这个测试会真实改写仓库文件，跑完自动按字节还原，不会污染工作区
 
 这套测试用变异测试验过有效性：故意把判定分支、噪声正则、类型识别、`neg` 语义、优先级排序、`callAI` 降级、记忆容量、占位符注入、`parseAIJSON` strip、`buildDataSummary` 字段、`crashPenalty` 符号、`exportHTMLReportData` 返回值、`buildHighlights` 阈值这几处分别改坏，全部被抓到。
 
@@ -388,6 +440,6 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 
 ## 图标
 
-桌面快捷方式和独立 exe 都用的是 `assets/icon.ico`。
+桌面版和独立 exe 都用的是 `assets/icon.ico`。
 
 如果你想换配色或重画，改 `assets/make-icon.py` 最上面几个颜色常量，然后双击/运行这个 Python 脚本即可重新生成 `icon.ico` 和 `icon.png`。

@@ -1,5 +1,5 @@
 @echo off
-chcp 936 >nul 2>&1
+chcp 65001 >nul 2>&1
 setlocal
 
 set "SRC=%~dp0project-analyzer.html"
@@ -7,58 +7,82 @@ set "ICON=%~dp0assets\icon.ico"
 set "BUILD=%~dp0build-electron"
 
 echo.
-echo   ÏîÄ¿½á¹¹·ÖÎöÆ÷ - ´ò°ü³É¶ÀÁ¢ exe£¨Electron ·½Ê½£©
+echo   é¡¹ç›®ç»“æ„åˆ†æå™¨ - æ‰“åŒ…æˆç‹¬ç«‹ exeï¼ˆElectron æ–¹å¼ï¼‰ ##
 echo   ==============================================
 echo.
-echo   ËµÃ÷: Õâ¸ö·½°¸»á°Ñ Chromium ÔËĞĞÊ±Ò»Æğ´ò½ø exe£¬
-echo         ³ÉÆ·Ô¼ 80-120MB£¬µ«ÍêÈ«¶ÀÁ¢£¬¿½µ½ÈÎºÎ Windows µçÄÔ¶¼ÄÜÅÜ¡£
-echo         Ê×´ÎÔËĞĞĞèÒªÁªÍøÏÂÔØÒÀÀµ£¬ºÄÊ±¼¸·ÖÖÓ¡£
+echo   è¯´æ˜: è¿™ä¸ªæ–¹æ¡ˆä¼šæŠŠ Chromium è¿è¡Œæ—¶ä¸€èµ·æ‰“è¿› exeï¼Œ ##
+echo         æˆå“çº¦ 80-120MBï¼Œä½†å®Œå…¨ç‹¬ç«‹ï¼Œæ‹·åˆ°ä»»ä½• Windows ç”µè„‘éƒ½èƒ½è·‘ã€‚ ##
+echo         é¦–æ¬¡è¿è¡Œéœ€è¦è”ç½‘ä¸‹è½½ä¾èµ–ï¼Œè€—æ—¶å‡ åˆ†é’Ÿã€‚ ##
 echo.
-echo   Èç¹ûÄãÖ»ÊÇ×Ô¼ºÓÃ£¬¸üÍÆ¼ö build-desktop.bat£¨ÁãÌå»ı¡¢ÁãÏÂÔØ£©¡£
+echo   å¦‚æœä½ åªæ˜¯æƒ³è‡ªå·±åœ¨ç”µè„‘ä¸Šç”¨ï¼Œä¸å¿…æ‰“åŒ…ï¼Œä¸¤ç§æ›´å¿«çš„æ–¹å¼: ##
+echo     1. ç›´æ¥åŒå‡» project-analyzer.htmlï¼ˆæµè§ˆå™¨ç‰ˆï¼Œé›¶å®‰è£…ï¼‰ ##
+echo     2. åŒå‡» run.batï¼ˆç”¨æœ¬æœºå·²æœ‰çš„ Electron èµ·ï¼Œä¸æ‰“åŒ…ï¼‰ ##
 echo.
 pause
 
 if not exist "%SRC%" (
-  echo   [´íÎó] ÕÒ²»µ½ project-analyzer.html
+  echo   [é”™è¯¯] æ‰¾ä¸åˆ° project-analyzer.html
   pause
   exit /b 1
 )
 
 where node >nul 2>&1
 if errorlevel 1 (
-  echo   [´íÎó] Ã»ÕÒµ½ Node.js¡£
-  echo   ÇëÏÈ°²×°: https://nodejs.org  £¨Ñ¡ LTS °æ±¾£¬Ò»Â·ÏÂÒ»²½¼´¿É£©
+  echo   [é”™è¯¯] æ²¡æ‰¾åˆ° Node.jsã€‚ ##
+  echo   è¯·å…ˆå®‰è£…: https://nodejs.org  ï¼ˆé€‰ LTS ç‰ˆæœ¬ï¼Œä¸€è·¯ä¸‹ä¸€æ­¥å³å¯ï¼‰ ##
   pause
   exit /b 1
 )
 
-echo   ¸´ÖÆÒ³ÃæÎÄ¼şÓëÍ¼±ê...
+rem ---------- ç‰ˆæœ¬å·ç¡®è®¤ï¼ˆå¿…é¡»åœ¨å¤åˆ¶ html åˆ° build-electron ä¹‹å‰å®Œæˆï¼‰---------- ##
+rem å¦åˆ™å‰¯æœ¬é‡Œçš„é¡µè„šç‰ˆæœ¬å·ä¼šè½åäºæ ¹æ–‡ä»¶ã€‚ ##
+echo   å½“å‰ç‰ˆæœ¬:
+call node "%~dp0scripts\set-version.mjs"
+echo.
+echo   è¯·è¾“å…¥ç‰ˆæœ¬å·ï¼ˆç›´æ¥å›è½¦æ²¿ç”¨å½“å‰ç‰ˆæœ¬ï¼‰ ##
+echo   æ ¼å¼: x.y.z    ä¾‹å¦‚ 1.1.0 / 2.0.0 / 1.2.3-beta.1
+set "NEWVER="
+set /p NEWVER="  ç‰ˆæœ¬å·: "
+if not "%NEWVER%"=="" (
+  call node "%~dp0scripts\set-version.mjs" %NEWVER%
+  if errorlevel 1 (
+    echo.
+    echo   [é”™è¯¯] ç‰ˆæœ¬å·ä¸åˆæ³•ï¼ŒåŒæ­¥å¤±è´¥ï¼Œæœªä¿®æ”¹ä»»ä½•æ–‡ä»¶ã€‚ ##
+    echo   è¯·æŒ‰ä¸Šé¢çš„æç¤ºä¿®æ­£æ ¼å¼åé‡è¯•ï¼ˆæ ¼å¼: x.y.zï¼Œå¦‚ 1.1.0ï¼‰ã€‚ ##
+    pause
+    exit /b 1
+  )
+) else (
+  echo   æ²¿ç”¨å½“å‰ç‰ˆæœ¬ã€‚ ##
+)
+echo.
+
+echo   å¤åˆ¶é¡µé¢æ–‡ä»¶ä¸å›¾æ ‡...
 copy /Y "%SRC%" "%BUILD%\project-analyzer.html" >nul
 copy /Y "%ICON%" "%BUILD%\icon.ico" >nul
-
-rem Í¬²½ prompts/ Ä¿Â¼£¨AI ÌáÊ¾´ÊÎÄ¼ş£¬loadPrompt ÔÚ exe ÀïÓÃ XHR Í¬²½È¡£©
+rem åŒæ­¥ prompts/ ç›®å½•ï¼ˆAI æç¤ºè¯æ–‡ä»¶ï¼ŒloadPrompt åœ¨ exe é‡Œç”¨ XHR åŒæ­¥å–ï¼‰ ##
 xcopy /Y /I /Q "%~dp0prompts\*" "%BUILD%\prompts\" >nul
 if errorlevel 1 (
-  echo   [¾¯¸æ] prompts/ Í¬²½Ê§°Ü£¬AI ¸¨Öú¹¦ÄÜ½«×ß¶µµ×ÌáÊ¾´Ê¡£
+  echo   [è­¦å‘Š] prompts/ åŒæ­¥å¤±è´¥ï¼ŒAI è¾…åŠ©åŠŸèƒ½å°†èµ°å…œåº•æç¤ºè¯ã€‚ ##
 ) else (
-  echo   prompts/ ÒÑÍ¬²½µ½ build-electron\
+  echo   prompts/ å·²åŒæ­¥åˆ° build-electron\
 )
 
 cd /d "%BUILD%"
 
-rem ---------- ¹úÄÚ¾µÏñ + Ìø¹ı Electron ÏÂÔØÖ¤ÊéÑéÖ¤ ----------
-rem ½ö±¾µØ´ò°üÊ¹ÓÃ£¬²»ĞŞ¸ÄÈ«¾Ö npm ÅäÖÃ
+rem ---------- å›½å†…é•œåƒ + è·³è¿‡ Electron ä¸‹è½½è¯ä¹¦éªŒè¯ ----------
+rem ä»…æœ¬åœ°æ‰“åŒ…ä½¿ç”¨ï¼Œä¸ä¿®æ”¹å…¨å±€ npm é…ç½® ##
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 
 echo.
-echo   °²×°ÒÀÀµ£¨Ê×´Î½ÏÂı£©...
+echo   å®‰è£…ä¾èµ–ï¼ˆé¦–æ¬¡è¾ƒæ…¢ï¼‰...
 echo.
 call npm install --registry=https://registry.npmmirror.com
 if errorlevel 1 (
   echo.
-  echo   [´íÎó] npm install Ê§°Ü¡£
-  echo   Èô¿¨ÔÚÏÂÔØ£¬¿ÉÏÈ»»¹úÄÚÔ´ÔÙÖØÊÔ:
+  echo   [é”™è¯¯] npm install å¤±è´¥ã€‚ ##
+  echo   è‹¥å¡åœ¨ä¸‹è½½ï¼Œå¯å…ˆæ¢å›½å†…æºå†é‡è¯•:
   echo     npm config set registry https://registry.npmmirror.com
   echo     set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
   pause
@@ -66,18 +90,18 @@ if errorlevel 1 (
 )
 
 echo.
-echo   ´ò°üÖĞ£¨electron-builder Ê×´ÎÒ²ÒªÏÂÔØ£¬Çë¼ÌĞøµÈ´ı£©...
+echo   æ‰“åŒ…ä¸­ï¼ˆelectron-builder é¦–æ¬¡ä¹Ÿè¦ä¸‹è½½ï¼Œè¯·ç»§ç»­ç­‰å¾…ï¼‰...
 echo.
 call npm run dist
 if errorlevel 1 (
   echo.
-  echo   [´íÎó] ´ò°üÊ§°Ü¡£
+  echo   [é”™è¯¯] æ‰“åŒ…å¤±è´¥ã€‚ ##
   pause
   exit /b 1
 )
 
 echo.
-echo   Íê³É! Êä³öµÄ exe ÔÚÏÂÃæÕâ¸öÄ¿Â¼Àï:
+echo   å®Œæˆ! è¾“å‡ºçš„ exe åœ¨ä¸‹é¢è¿™ä¸ªç›®å½•é‡Œ:
 echo   %BUILD%\dist-out\
 echo.
 start "" "%BUILD%\dist-out"

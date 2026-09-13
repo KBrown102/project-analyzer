@@ -1,6 +1,6 @@
 {
   "name": "project-analyzer",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "项目结构分析器 - 按 CCGS 结构分析本地项目并可视化对比",
   "main": "main.js",
   "author": "local",

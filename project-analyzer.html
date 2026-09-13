@@ -2935,6 +2935,11 @@
     if (bh) bh.onclick = exportHTMLReport;
   })();
 
+  // —— 版本号（唯一数据源：根 package.json）——
+  // 由 scripts/set-version.mjs 自动同步，可双击 设置版本号.bat 或跑 npm run version:set x.y.z 修改。
+  // 导出报告的页脚水印引用这个常量，避免版本号在页脚里再硬编码一份。
+  var APP_VERSION = "1.0.2";
+
   // —— P2-2：可视化 HTML 报告导出 ——
   function exportHTMLReportData(items){
     items = items || [A, B].filter(Boolean);
@@ -2948,7 +2953,7 @@
     html += '<title>项目结构分析报告 - ' + esc(title) + '</title>\n' + REPORT_CSS + '</head>\n<body>\n<div class="container">\n';
     html += '<h1>项目结构分析报告</h1>\n<p class="subtitle">' + esc(title) + ' · 生成于 ' + new Date().toLocaleString("zh-CN") + '</p>\n';
     html += projectsHtml;
-    html += '<div class="footer">由项目结构分析器 v1.0.0 生成</div>\n</div>\n</body>\n</html>';
+    html += '<div class="footer">由项目结构分析器 v' + APP_VERSION + ' 生成</div>\n</div>\n</body>\n</html>';
     return { name: fname, html: html, count: items.length };
   }
   function renderReportProject(d){

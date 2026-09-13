@@ -1,18 +1,18 @@
 @echo off
-chcp 936 >nul 2>&1
+chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 
 set "BUILD=%~dp0build-electron"
 
 echo.
-echo   ÏîÄ¿½á¹¹·ÖÎöÆ÷ - ÓÃ±¾µØ Electron Ö±½ÓÆô¶¯
+echo   é¡¹ç›®ç»“æž„åˆ†æžå™¨ - ç”¨æœ¬åœ° Electron ç›´æŽ¥å¯åŠ¨ ##
 echo   =========================================
 echo.
-echo   ËµÃ÷: Õâ¸ö½Å±¾²»´ò°ü exe£¬¶øÊÇÖ±½ÓÕÒ±¾»úÒÑÓÐµÄ Electron Æô¶¯·ÖÎöÆ÷¡£
-echo         Èç¹ûÄãÖ®Ç°×°¹ý Electron£¬Õâ¸ö½Å±¾ÄÜÈÆ¹ýÏÂÔØºÍÖ¤ÊéÎÊÌâ¡£
+echo   è¯´æ˜Ž: è¿™ä¸ªè„šæœ¬ä¸æ‰“åŒ… exeï¼Œè€Œæ˜¯ç›´æŽ¥æ‰¾æœ¬æœºå·²æœ‰çš„ Electron å¯åŠ¨åˆ†æžå™¨ã€‚ ##
+echo         å¦‚æžœä½ ä¹‹å‰è£…è¿‡ Electronï¼Œè¿™ä¸ªè„šæœ¬èƒ½ç»•è¿‡ä¸‹è½½å’Œè¯ä¹¦é—®é¢˜ã€‚ ##
 echo.
 
-rem ---------- ºòÑ¡Â·¾¶£¨´ÓÉÏµ½ÏÂÓÅÏÈ£©----------
+rem ---------- å€™é€‰è·¯å¾„ï¼ˆä»Žä¸Šåˆ°ä¸‹ä¼˜å…ˆï¼‰----------
 set "ELECTRON="
 if exist "%LocalAppData%\Programs\electron\electron.exe" set "ELECTRON=%LocalAppData%\Programs\electron\electron.exe"
 if not defined ELECTRON if exist "%ProgramFiles%\electron\electron.exe" set "ELECTRON=%ProgramFiles%\electron\electron.exe"
@@ -22,30 +22,30 @@ if not defined ELECTRON if exist "C:\Users\Administrator\AppData\Roaming\Tencent
 
 if not defined ELECTRON (
   echo.
-  echo   [´íÎó] Ã»ÕÒµ½±¾µØ Electron¡£
+  echo   [é”™è¯¯] æ²¡æ‰¾åˆ°æœ¬åœ° Electronã€‚ ##
   echo.
-  echo   ÒÑËÑ¹ýÕâÐ©Î»ÖÃ:
+  echo   å·²æœè¿‡è¿™äº›ä½ç½®:
   echo     - %LocalAppData%\Programs\electron\electron.exe
   echo     - %ProgramFiles%\electron\electron.exe
   echo     - %APPDATA%\npm\node_modules\electron\dist\electron.exe
   echo     - %BUILD%\node_modules\electron\dist\electron.exe
-  echo     - Ò»´¦ Tencent Marvis ÁÙÊ±»º´æ
+  echo     - ä¸€å¤„ Tencent Marvis ä¸´æ—¶ç¼“å­˜ ##
   echo.
-  echo   Èç¹ûÄãÈ·¶¨×°¹ý£¬°ÑÍêÕûÂ·¾¶Ð´½øÕâ¸ö½Å±¾µÚ 14-18 ÐÐÔÙÊÔ¡£
-  echo   »òÕßÔËÐÐ build-exe-electron.bat ×Ô¶¯ÏÂÔØ°²×°£¨ÐèÒªÁªÍø£©¡£
+  echo   å¦‚æžœä½ ç¡®å®šè£…è¿‡ï¼ŒæŠŠå®Œæ•´è·¯å¾„å†™è¿›è¿™ä¸ªè„šæœ¬ç¬¬ 14-18 è¡Œå†è¯•ã€‚ ##
+  echo   æˆ–è€…è¿è¡Œ build-exe-electron.bat è‡ªåŠ¨ä¸‹è½½å®‰è£…ï¼ˆéœ€è¦è”ç½‘ï¼‰ã€‚ ##
   echo.
   pause
   exit /b 1
 )
 
-echo   ÕÒµ½ Electron: !ELECTRON!
-echo   ÕýÔÚÆô¶¯·ÖÎöÆ÷...
+echo   æ‰¾åˆ° Electron: !ELECTRON!
+echo   æ­£åœ¨å¯åŠ¨åˆ†æžå™¨...
 echo.
 
 cd /d "%BUILD%"
 "!ELECTRON!" .
 
 echo.
-echo   ·ÖÎöÆ÷ÒÑ¹Ø±Õ¡£
+echo   åˆ†æžå™¨å·²å…³é—­ã€‚ ##
 echo.
 pause

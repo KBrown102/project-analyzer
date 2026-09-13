@@ -15,23 +15,29 @@
 ```json
 {
   "scripts": {
-    "test": "node tests/smoke.test.mjs && node tests/logic.test.mjs",
+    "test": "node scripts/sync-electron.mjs && node tests/smoke.test.mjs && node tests/regex.test.mjs && node tests/logic.test.mjs && node tests/scanner.test.mjs && node tests/version.test.mjs",
     "test:smoke": "node tests/smoke.test.mjs",
+    "test:regex": "node tests/regex.test.mjs",
     "test:logic": "node tests/logic.test.mjs",
-    "sync": "node scripts/sync-electron.mjs"
+    "test:scanner": "node tests/scanner.test.mjs",
+    "test:version": "node tests/version.test.mjs",
+    "sync": "node scripts/sync-electron.mjs",
+    "version:set": "node scripts/set-version.mjs"
   }
 }
 ```
 
-- `npm test`：跑所有测试。
+- `npm test`：先 sync 再跑全部五套测试（sync 放最前，否则副本落后会直接判红）。
 - `npm run sync`：改完 `project-analyzer.html` 后，把最新内容同步到 `build-electron/project-analyzer.html`。
+- `npm run version:set`：改版本号，一次同步全部 4 处（等价于双击 `设置版本号.bat`）。
 
 ### `.gitignore`
 
 已默认排除：
 
 - `node_modules/`、`build-electron/node_modules/`、`build-electron/dist-out/`
-- `launcher.vbs`（建桌面快捷方式时临时生成）
+- `build-electron/package-lock.json`（本地打包生成，CI 不入库）
+- `build-electron/.data/`（开发态 userData 隔离目录）
 - `*.log`、`.DS_Store`、`Thumbs.db`
 
 如果你新增了临时产物，顺手加进来。
@@ -53,12 +59,15 @@ Electron 打包配置：
 - 换图标：改 `assets/make-icon.py` 最上面的颜色常量，然后运行该脚本重新生成。
 - 注意：`build-electron/icon.ico` 是 Electron 打包用的副本；改完根目录下的 `assets/icon.ico`，也要同步到 `build-electron/icon.ico`，否则打出来的 exe 图标不会变。
 
-## 快捷方式配置
+## 启动方式
 
-- `build-desktop.bat`：用 VBScript 方式在桌面建快捷方式。
-- `build-desktop-ps.bat`：用 PowerShell 方式，适合 VBScript 被禁用的情况。
+项目提供三种启动方式，按「省事 → 独立」排列：
 
-两个脚本都会临时生成 `launcher.vbs`（在 `.gitignore` 里）。如果未来目录结构变了，改脚本里的路径即可。
+- **浏览器版**：直接双击 `project-analyzer.html`。零安装、零下载，改完刷新即见效果。
+- **本地 Electron**：双击 `run.bat`。会用本机已装的 Electron 起一个桌面窗口，不打包、不下载。适合想要独立窗口但不想等打包的场景。
+- **打包成 exe**：双击 `build-exe-electron.bat`。把 Chromium 一起打进去，成品 80–120MB，可拷给别人。需要联网下载依赖。
+
+> 历史上还有 `build-desktop.bat` / `build-desktop-ps.bat` 两个「在桌面建快捷方式」的脚本，以及它们临时生成的 `launcher.vbs`，已于 2026-09-03 移除（对应的 `launcher.vbs` 条目也已从 `.gitignore` 清理）。现在想放桌面，直接给 `project-analyzer.html` 或 `run.bat` 建快捷方式即可。
 
 ## 测试配置
 

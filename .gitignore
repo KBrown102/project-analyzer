@@ -7,9 +7,6 @@ build-electron/package-lock.json
 # 开发态 userData 隔离目录（main.js app.setPath 重定向到此，避免污染 %APPDATA%）
 build-electron/.data/
 
-# 建快捷方式时临时生成的脚本
-launcher.vbs
-
 # 杂项
 *.log
 .DS_Store

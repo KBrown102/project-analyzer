@@ -1,41 +1,39 @@
 @echo off
-chcp 936 >nul 2>&1
+chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 
 set "ROOT=%~dp0"
 set "BUILD=%ROOT%build-electron"
-set "LAUNCHER=%ROOT%launcher.vbs"
 
-rem ---------- ´ýÇåÀíÏî ----------
+rem ---------- å¾…æ¸…ç†é¡¹ ----------
 set "P1=%BUILD%\node_modules"
 set "P2=%BUILD%\dist-out"
 set "P3=%BUILD%\package-lock.json"
-set "P4=%LAUNCHER%"
 set "C1=%LocalAppData%\electron\Cache"
 set "C2=%LocalAppData%\electron-builder\Cache"
 set "C3=%AppData%\npm-cache"
 
 echo.
-echo   ÏîÄ¿½á¹¹·ÖÎöÆ÷ - ÇåÀí´ò°ü²úÎïÓë»º´æ
+echo   é¡¹ç›®ç»“æž„åˆ†æžå™¨ - æ¸…ç†æ‰“åŒ…äº§ç‰©ä¸Žç¼“å­˜ ##
 echo   =====================================
 echo.
-echo   µ±Ç°¿ÉÇåÀíÏî£º
+echo   å½“å‰å¯æ¸…ç†é¡¹ï¼š ##
 echo.
 
-rem ÓÃ PowerShell Êä³ö¸÷Ä¿Â¼´óÐ¡£¬²»²¶»ñ£¬Ö»¿´
-powershell -NoProfile -ExecutionPolicy Bypass -Command "function F($n,$p){ if(Test-Path $p){ $s=(Get-ChildItem -LiteralPath $p -Recurse -File -EA SilentlyContinue ^| Measure-Object -Property Length -Sum).Sum; $u='B'; if($s -gt 1GB){$s=$s/1GB;$u='GB'} elseif($s -gt 1MB){$s=$s/1MB;$u='MB'} elseif($s -gt 1KB){$s=$s/1KB;$u='KB'} Write-Host ('  {0,-34} {1,8:N1} {2}' -f $n,$s,$u) } else { Write-Host ('  {0,-34} {1,8}' -f $n,'ÎÞ') } } F '±¾´ÎÒÀÀµ node_modules' '%BUILD%\node_modules'; F '±¾´Î´ò°ü²úÎï dist-out' '%BUILD%\dist-out'; F '±¾´ÎËøÎÄ¼þ package-lock.json' '%BUILD%\package-lock.json'; F 'VBScript ÁÙÊ±ÎÄ¼þ launcher.vbs' '%LAUNCHER%'; F 'Electron È«¾Ö»º´æ' '%LocalAppData%\electron\Cache'; F 'electron-builder È«¾Ö»º´æ' '%LocalAppData%\electron-builder\Cache'; F 'npm È«¾Ö»º´æ' '%AppData%\npm-cache'"
+rem ç”¨ PowerShell è¾“å‡ºå„ç›®å½•å¤§å°ï¼Œä¸æ•èŽ·ï¼Œåªçœ‹ ##
+powershell -NoProfile -ExecutionPolicy Bypass -Command "function F($n,$p){ if(Test-Path $p){ $s=(Get-ChildItem -LiteralPath $p -Recurse -File -EA SilentlyContinue ^| Measure-Object -Property Length -Sum).Sum; $u='B'; if($s -gt 1GB){$s=$s/1GB;$u='GB'} elseif($s -gt 1MB){$s=$s/1MB;$u='MB'} elseif($s -gt 1KB){$s=$s/1KB;$u='KB'} Write-Host ('  {0,-34} {1,8:N1} {2}' -f $n,$s,$u) } else { Write-Host ('  {0,-34} {1,8}' -f $n,'æ— ') } } F 'æœ¬æ¬¡ä¾èµ– node_modules' '%BUILD%\node_modules'; F 'æœ¬æ¬¡æ‰“åŒ…äº§ç‰© dist-out' '%BUILD%\dist-out'; F 'æœ¬æ¬¡é”æ–‡ä»¶ package-lock.json' '%BUILD%\package-lock.json'; F 'Electron å…¨å±€ç¼“å­˜' '%LocalAppData%\electron\Cache'; F 'electron-builder å…¨å±€ç¼“å­˜' '%LocalAppData%\electron-builder\Cache'; F 'npm å…¨å±€ç¼“å­˜' '%AppData%\npm-cache'"
 
 echo.
-echo   ÇëÑ¡Ôñ£º
-echo     1  ÇåÀí±¾´Î´ò°ü²úÎï£¨ÍÆ¼ö´ò°üÇ°ÓÃ£©
-echo     2  ÔÙÇå Electron / electron-builder È«¾Ö»º´æ
-echo     3  È«²¿ÇåÀí£¨º¬ npm È«¾Ö»º´æ£©
-echo     0  È¡Ïû
+echo   è¯·é€‰æ‹©ï¼š ##
+echo     1  æ¸…ç†æœ¬æ¬¡æ‰“åŒ…äº§ç‰©ï¼ˆæŽ¨èæ‰“åŒ…å‰ç”¨ï¼‰ ##
+echo     2  å†æ¸… Electron / electron-builder å…¨å±€ç¼“å­˜ ##
+echo     3  å…¨éƒ¨æ¸…ç†ï¼ˆå« npm å…¨å±€ç¼“å­˜ï¼‰ ##
+echo     0  å–æ¶ˆ ##
 echo.
-set /p CH="ÊäÈëÊý×Öºó»Ø³µ: "
+set /p CH="è¾“å…¥æ•°å­—åŽå›žè½¦: "
 
 if "%CH%"=="0" (
-  echo   ÒÑÈ¡Ïû¡£
+  echo   å·²å–æ¶ˆã€‚ ##
   pause
   exit /b 0
 )
@@ -43,48 +41,45 @@ if "%CH%"=="0" (
 echo.
 
 if "%CH%"=="1" (
-  echo   [1/3] ÕýÔÚÉ¾³ý±¾´Î´ò°ü²úÎï...
-  if exist "%P1%" rd /s /q "%P1%" && echo     ÒÑÉ¾ %P1% || echo     Î´ÕÒµ½ %P1%
-  if exist "%P2%" rd /s /q "%P2%" && echo     ÒÑÉ¾ %P2% || echo     Î´ÕÒµ½ %P2%
-  if exist "%P3%" del /f /q "%P3%" && echo     ÒÑÉ¾ %P3% || echo     Î´ÕÒµ½ %P3%
-  if exist "%P4%" del /f /q "%P4%" && echo     ÒÑÉ¾ %P4% || echo     Î´ÕÒµ½ %P4%
+  echo   [1/3] æ­£åœ¨åˆ é™¤æœ¬æ¬¡æ‰“åŒ…äº§ç‰©...
+  if exist "%P1%" rd /s /q "%P1%" && echo     å·²åˆ  %P1% || echo     æœªæ‰¾åˆ° %P1%
+  if exist "%P2%" rd /s /q "%P2%" && echo     å·²åˆ  %P2% || echo     æœªæ‰¾åˆ° %P2%
+  if exist "%P3%" del /f /q "%P3%" && echo     å·²åˆ  %P3% || echo     æœªæ‰¾åˆ° %P3%
   echo.
-  echo   ÇåÀíÍê³É¡£ÏÂ´Î´ò°ü»á´ÓÐÂÏÂÔØÒÀÀµ¡£
+  echo   æ¸…ç†å®Œæˆã€‚ä¸‹æ¬¡æ‰“åŒ…ä¼šä»Žæ–°ä¸‹è½½ä¾èµ–ã€‚ ##
   pause
   exit /b 0
 )
 
 if "%CH%"=="2" (
-  echo   [1/3] ÕýÔÚÉ¾³ý±¾´Î´ò°ü²úÎï...
-  if exist "%P1%" rd /s /q "%P1%" && echo     ÒÑÉ¾ %P1%
-  if exist "%P2%" rd /s /q "%P2%" && echo     ÒÑÉ¾ %P2%
-  if exist "%P3%" del /f /q "%P3%" && echo     ÒÑÉ¾ %P3%
-  if exist "%P4%" del /f /q "%P4%" && echo     ÒÑÉ¾ %P4%
-  echo   [2/3] ÕýÔÚÉ¾³ý Electron Óë electron-builder È«¾Ö»º´æ...
-  if exist "%C1%" rd /s /q "%C1%" && echo     ÒÑÉ¾ %C1%
-  if exist "%C2%" rd /s /q "%C2%" && echo     ÒÑÉ¾ %C2%
+  echo   [1/3] æ­£åœ¨åˆ é™¤æœ¬æ¬¡æ‰“åŒ…äº§ç‰©...
+  if exist "%P1%" rd /s /q "%P1%" && echo     å·²åˆ  %P1%
+  if exist "%P2%" rd /s /q "%P2%" && echo     å·²åˆ  %P2%
+  if exist "%P3%" del /f /q "%P3%" && echo     å·²åˆ  %P3%
+  echo   [2/3] æ­£åœ¨åˆ é™¤ Electron ä¸Ž electron-builder å…¨å±€ç¼“å­˜...
+  if exist "%C1%" rd /s /q "%C1%" && echo     å·²åˆ  %C1%
+  if exist "%C2%" rd /s /q "%C2%" && echo     å·²åˆ  %C2%
   echo.
-  echo   ÇåÀíÍê³É¡£ÏÂ´Î´ò°ü»áÖØÐÂÏÂÔØ Electron ¶þ½øÖÆ¡£
+  echo   æ¸…ç†å®Œæˆã€‚ä¸‹æ¬¡æ‰“åŒ…ä¼šé‡æ–°ä¸‹è½½ Electron äºŒè¿›åˆ¶ã€‚ ##
   pause
   exit /b 0
 )
 
 if "%CH%"=="3" (
-  echo   [1/3] ÕýÔÚÉ¾³ý±¾´Î´ò°ü²úÎï...
-  if exist "%P1%" rd /s /q "%P1%" && echo     ÒÑÉ¾ %P1%
-  if exist "%P2%" rd /s /q "%P2%" && echo     ÒÑÉ¾ %P2%
-  if exist "%P3%" del /f /q "%P3%" && echo     ÒÑÉ¾ %P3%
-  if exist "%P4%" del /f /q "%P4%" && echo     ÒÑÉ¾ %P4%
-  echo   [2/3] ÕýÔÚÉ¾³ý Electron Óë electron-builder È«¾Ö»º´æ...
-  if exist "%C1%" rd /s /q "%C1%" && echo     ÒÑÉ¾ %C1%
-  if exist "%C2%" rd /s /q "%C2%" && echo     ÒÑÉ¾ %C2%
-  echo   [3/3] ÕýÔÚÇåÀí npm È«¾Ö»º´æ...
-  call npm cache clean --force >nul 2>&1 && echo     npm »º´æÒÑÇå¿Õ || echo     npm »º´æÇåÀíÊ§°Ü£¨¿ÉÄÜÎÞ Node£©
+  echo   [1/3] æ­£åœ¨åˆ é™¤æœ¬æ¬¡æ‰“åŒ…äº§ç‰©...
+  if exist "%P1%" rd /s /q "%P1%" && echo     å·²åˆ  %P1%
+  if exist "%P2%" rd /s /q "%P2%" && echo     å·²åˆ  %P2%
+  if exist "%P3%" del /f /q "%P3%" && echo     å·²åˆ  %P3%
+  echo   [2/3] æ­£åœ¨åˆ é™¤ Electron ä¸Ž electron-builder å…¨å±€ç¼“å­˜...
+  if exist "%C1%" rd /s /q "%C1%" && echo     å·²åˆ  %C1%
+  if exist "%C2%" rd /s /q "%C2%" && echo     å·²åˆ  %C2%
+  echo   [3/3] æ­£åœ¨æ¸…ç† npm å…¨å±€ç¼“å­˜...
+  call npm cache clean --force >nul 2>&1 && echo     npm ç¼“å­˜å·²æ¸…ç©º ## || echo     npm ç¼“å­˜æ¸…ç†å¤±è´¥ï¼ˆå¯èƒ½æ—  Nodeï¼‰ ##
   echo.
-  echo   È«²¿ÇåÀíÍê³É¡£
+  echo   å…¨éƒ¨æ¸…ç†å®Œæˆã€‚ ##
   pause
   exit /b 0
 )
 
-echo   Î´ÖªÑ¡Ïî "%CH%"£¬ÒÑÈ¡Ïû¡£
+echo   æœªçŸ¥é€‰é¡¹ "%CH%"ï¼Œå·²å–æ¶ˆã€‚ ##
 pause
