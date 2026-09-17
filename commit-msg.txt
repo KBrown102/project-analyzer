@@ -1,8 +1,0 @@
-feat(P2): 崩溃日志扫描 + 可视化 HTML 报告导出 + 亮点评级
-
-- crashLogScan: 扫描 .log 文件提取 11 类错误模式（Lua/Python/JS/Java/Go/Rust/FATAL）
-- textFile/TEXT_RE 加 log 扩展名（.log 文件原来不进文本池）
-- exportHTMLReport: 导出独立可分享的卡片式 HTML 报告，移除导出 JSON 按钮
-- buildHighlights + calcGrade: 工程亮点清单 + A/B/C/D 总体评级（崩溃扣分）
-- README 更新：新增 P2 三功能章节、行数 3590->3750、测试 758->852
-- smoke +31 条结构断言，logic +64 条行为断言（852 项全绿）
