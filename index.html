@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目结构分析器 · Project Analyzer</title>
+<meta name="description" content="选一个项目文件夹，看看它离「能交付」还差什么。纯本地运行，不联网、不上传。">
+<link rel="icon" href="./assets/icon.png">
+<style>
+  :root{
+    --bg:#16181c; --panel:#1e2126; --panel2:#252930; --line:#33383f;
+    --tx:#e6e8ea; --tx2:#9aa3ad; --tx3:#6b7480;
+    --ok:#5DCAA5; --okbg:#0F6E56; --warn:#EF9F27; --warnbg:#633806;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--tx);
+    font:15px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    padding:72px 24px 64px;
+    background-image:
+      radial-gradient(760px 380px at 18% -8%, rgba(93,202,165,.07), transparent 70%),
+      radial-gradient(620px 320px at 88% 4%, rgba(239,159,39,.05), transparent 70%);
+    background-repeat:no-repeat;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:31px;font-weight:600;letter-spacing:.4px;line-height:1.3}
+  .en{color:var(--tx3);font-size:14px;font-weight:400;letter-spacing:1.2px;margin-top:8px}
+  .lead{color:var(--tx2);font-size:16px;margin-top:20px;max-width:600px}
+  .lead b{color:var(--tx);font-weight:500}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:30px}
+  a.btn{
+    display:inline-flex;align-items:center;gap:8px;
+    border-radius:9px;padding:11px 20px;font-size:14px;
+    text-decoration:none;transition:border-color .15s,background .15s,color .15s;
+  }
+  a.primary{background:var(--okbg);border:1px solid var(--ok);color:#fff}
+  a.primary:hover{background:#12856a}
+  a.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--tx)}
+  a.ghost:hover{border-color:var(--ok);color:var(--ok)}
+  .note{color:var(--tx3);font-size:12.5px;margin-top:14px}
+  .note .sep{margin:0 7px;opacity:.5}
+  h2{font-size:13px;font-weight:500;color:var(--tx3);letter-spacing:1.4px;margin:56px 0 16px}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+  .card .t{font-size:15px;font-weight:500;margin-bottom:7px;display:flex;align-items:center;gap:9px}
+  .card .t::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);flex:none}
+  .card .t.w::before{background:var(--warn)}
+  .card p{color:var(--tx2);font-size:13.5px;line-height:1.75}
+  .card code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
+  .ways{display:flex;flex-direction:column;gap:11px}
+  .way{display:flex;gap:14px;align-items:baseline;padding-bottom:11px;border-bottom:1px solid var(--line)}
+  .way:last-child{border-bottom:none;padding-bottom:0}
+  .way .k{flex:none;width:104px;color:var(--tx3);font-size:13px}
+  .way .v{color:var(--tx2);font-size:13.5px}
+  .way .v b{color:var(--tx);font-weight:500}
+  footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);
+    color:var(--tx3);font-size:12.5px;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  footer a{color:var(--tx2);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:1px}
+  footer a:hover{color:var(--ok);border-color:var(--ok)}
+  @media(max-width:640px){
+    body{padding:44px 18px 48px}
+    h1{font-size:25px}
+    .cards{grid-template-columns:1fr}
+    .way{flex-direction:column;gap:3px}
+    .way .k{width:auto}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>项目结构分析器</h1>
+    <div class="en">PROJECT ANALYZER</div>
+    <p class="lead">
+      选一个项目文件夹，它按项目形态逐项检查 —— <b>你在做的是哪一类项目、走到哪一步了、离「能交付」还差什么</b>。
+      不猜、不打分排名，只对着模板列缺口。
+    </p>
+    <div class="btns">
+      <a class="btn primary" href="./project-analyzer.html">在线打开分析器</a>
+      <a class="btn ghost" href="./project-analyzer.html" download="project-analyzer.html">下载离线版（单文件 HTML）</a>
+    </div>
+    <p class="note">
+      文件不会被上传到任何地方<span class="sep">·</span>断网可用<span class="sep">·</span>零安装、零依赖
+    </p>
+  </header>
+
+  <h2>它能做什么</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="t">认出项目形态</div>
+      <p>内置 18 套模板 —— 游戏、前端工程、Electron 桌面、Python、DevOps、IaC、规则仓库…… 扫一遍目录结构就能判断属于哪一类，再用那一类的标准来衡量你。</p>
+    </div>
+    <div class="card">
+      <div class="t w">列缺口，不是打分</div>
+      <p>按阶段和产物逐项对照，缺什么、该在哪一步补，配上 P0–P3 优先级和具体做法。做得好的地方也会单独列一份亮点清单。</p>
+    </div>
+    <div class="card">
+      <div class="t">对比前后两次</div>
+      <p>同一个目录分析两次，就能看出这段时间补的文档、加的测试有没有真的落到该落的位置。</p>
+    </div>
+    <div class="card">
+      <div class="t">AI 辅助（可选）</div>
+      <p>想让它替你判断和总结，就填一个 OpenAI 兼容的 API key（DeepSeek / 通义 / Kimi / 本地 Ollama 都行）。<b>不填也能用</b>，只是这部分能力关掉。</p>
+    </div>
+  </div>
+
+  <h2>三种用法</h2>
+  <div class="ways">
+    <div class="way">
+      <div class="k">在线版</div>
+      <div class="v">点上面的「在线打开分析器」，选文件夹即可。适合快速看一眼，不用下载任何东西。</div>
+    </div>
+    <div class="way">
+      <div class="k">离线版</div>
+      <div class="v">下载那个单文件 HTML，双击就在浏览器里跑。功能和在线版完全一样，断网可用，也不怕以后这个页面关掉。</div>
+    </div>
+    <div class="way">
+      <div class="k">Windows 独立版</div>
+      <div class="v"><b>要分析几万个文件的大目录</b>时用这个。浏览器版超过 8000 个文件会明显变慢，独立版是原生遍历，深度 8 层 / 3 万文件封顶。打包脚本在仓库里。</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>MIT License · Copyright (c) 2026 KBrown102</span>
+    <span class="sep">·</span>
+    <a href="https://github.com/KBrown102/project-analyzer">GitHub 仓库</a>
+    <a href="https://github.com/KBrown102/project-analyzer/releases">下载 Windows 版</a>
+  </footer>
+
+</div>
+</body>
+</html>

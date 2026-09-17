@@ -3,7 +3,7 @@
   "version": "1.0.2",
   "description": "项目结构分析器 - 按 CCGS 结构分析本地项目并可视化对比",
   "main": "main.js",
-  "author": "local",
+  "author": "KBrown102",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -13,7 +13,7 @@
   "build": {
     "appId": "com.local.projectanalyzer",
     "productName": "项目结构分析器",
-    "copyright": "Copyright © 2026",
+    "copyright": "Copyright © 2026 KBrown102 (MIT License)",
     "files": [
       "main.js",
       "preload.js",

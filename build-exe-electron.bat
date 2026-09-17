@@ -11,7 +11,7 @@ echo   项目结构分析器 - 打包成独立 exe（Electron 方式） ##
 echo   ==============================================
 echo.
 echo   说明: 这个方案会把 Chromium 运行时一起打进 exe， ##
-echo         成品约 80-120MB，但完全独立，拷到任何 Windows 电脑都能跑。 ##
+echo         成品约 70MB，但完全独立，拷到任何 Windows 电脑都能跑。 ##
 echo         首次运行需要联网下载依赖，耗时几分钟。 ##
 echo.
 echo   如果你只是想自己在电脑上用，不必打包，两种更快的方式: ##
@@ -70,10 +70,9 @@ if errorlevel 1 (
 
 cd /d "%BUILD%"
 
-rem ---------- 国内镜像 + 跳过 Electron 下载证书验证 ----------
+rem ---------- 国内镜像（加速 Electron 二进制下载）----------
 rem 仅本地打包使用，不修改全局 npm 配置 ##
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-set NODE_TLS_REJECT_UNAUTHORIZED=0
 
 echo.
 echo   安装依赖（首次较慢）...
@@ -81,12 +80,20 @@ echo.
 call npm install --registry=https://registry.npmmirror.com
 if errorlevel 1 (
   echo.
-  echo   [错误] npm install 失败。 ##
-  echo   若卡在下载，可先换国内源再重试:
-  echo     npm config set registry https://registry.npmmirror.com
-  echo     set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-  pause
-  exit /b 1
+  echo   [提示] 首次安装失败，正在重试一次。 ##
+  echo   若报 UNABLE_TO_VERIFY_LEAF_SIGNATURE，说明本机有代理或安全软件 ##
+  echo   在拦截 HTTPS。这次重试只在子进程内放行证书校验，装完即失效， ##
+  echo   不会改动系统或 npm 的全局设置。 ##
+  echo.
+  cmd /c "set NODE_TLS_REJECT_UNAUTHORIZED=0&& npm install --registry=https://registry.npmmirror.com"
+  if errorlevel 1 (
+    echo.
+    echo   [错误] 重试仍然失败，请检查网络或代理设置。 ##
+    echo   若只是卡在下载，可先换国内源再重试:
+    echo     npm config set registry https://registry.npmmirror.com
+    pause
+    exit /b 1
+  )
 )
 
 echo.

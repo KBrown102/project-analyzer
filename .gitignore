@@ -11,3 +11,6 @@ build-electron/.data/
 *.log
 .DS_Store
 Thumbs.db
+
+# 本地临时文件（曾经误入库过一次，2026-09-18 清理，别再放进来）
+commit-msg.txt

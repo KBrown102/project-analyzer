@@ -97,6 +97,22 @@
 
 报告内联 CSS，无外部依赖，拷给别人也能直接打开看。支持单项目 + 对比模式。
 
+## 历史快照
+
+> 2026-09-13 新增。让这个工具从「用一次就走」变成「能回头看」。
+
+每次分析成功会自动存一份**摘要**到浏览器 localStorage。工具栏「历史 (n/20)」按钮打开抽屉就能看到：
+
+- **列表**：项目名、分析时间、技术类型、套用的模板、文件数、阶段进度（x/y）
+- **回看**：展开那一次的完整摘要（根目录、阶段完成、产物齐全、是否截断）
+- **删除**：删单条；抽屉右上角「清空全部」一次清干净
+
+只存摘要级字段（**不存目录树**，避免撑爆 5MB 配额），最多留 **20 条**，超了自动丢最旧的。数据只在你自己的浏览器里，不上传任何地方；换浏览器、清了站点数据就没了 —— 这是刻意的。
+
+> 怎么用：隔几周回来分析同一个目录，把两条快照的阶段完成度和产物齐全度对一下，就知道这段时间补的文档有没有真的起作用。
+>
+> localStorage 不可用、配额满、序列化失败都会静默降级，只丢掉历史功能，不影响分析本身。
+
 ## AI 辅助分析（可选）
 
 > 2026-09-03 新增。文档不全时让大模型帮你判断「这一步分析得准不准、能不能跳过」「整体应该补什么」。默认关闭，不影响主功能。
@@ -172,7 +188,7 @@
 
 ### 单文件零依赖
 
-所有逻辑在一个 `<script>` 里（约 3750 行），通过 `window.__PA` 暴露核心函数给测试。双击打开即用，无构建步骤，改完刷新见效果。
+所有逻辑在一个 `<script>` 里（约 3590 行，全文件 3867 行），通过 `window.__PA` 暴露核心函数给测试。双击打开即用，无构建步骤，改完刷新见效果。
 
 取舍：分发成本为零（适合个人工具定位），代价是无法用模块化 / 类型系统 / lint 工具链。当前接近单文件可维护性拐点，后续演进见「路线图」。
 
@@ -232,9 +248,15 @@
 
 ## 怎么用
 
-### 最省事：打开就用
+### 最省事：在线打开
 
-双击 `project-analyzer.html`，点「选择项目 A」，选一个目录。
+打开 https://kbrown102.github.io/project-analyzer/ ，点「在线打开分析器」，选一个目录。零安装，先试试合不合手。
+
+> 那个页面是仓库根目录的 `index.html`，一个纯入口的落地页，不含任何分析逻辑（分析逻辑全在 `project-analyzer.html` 里）。GitHub Pages 不接受自定义入口文件名，所以入口必须叫 `index.html`。
+
+### 次省事：下载单文件，双击就用
+
+双击 `project-analyzer.html`，点「选择项目 A」，选一个目录。功能和在线版完全一样，多一份「断网也能用、不怕以后这个网页关掉」的保险。
 
 ### 想要独立窗口：用本机 Electron 起
 
@@ -300,6 +322,7 @@ npm run version:set 1.1.0
 项目结构分析器-1.0.0/
 ├── project-analyzer.html     分析器本体，单文件零依赖（约 3750 行）
 ├── package.json              测试与同步脚本入口
+├── LICENSE                   MIT 开源协议（Copyright (c) 2026 KBrown102）
 ├── build-exe-electron.bat    打包成独立 exe（打包前问版本号，自动同步 html + prompts）
 ├── clean-build.bat           清理打包产物与全局缓存
 ├── 设置版本号.bat             单独改版本号（不打包），同步到全部 4 处
@@ -331,6 +354,7 @@ npm run version:set 1.1.0
     ├── logic.test.mjs        分析逻辑行为测试（真跑 analyze，含 AI 校验/总结/记忆）
     ├── scanner.test.mjs      Electron 目录扫描测试（真扫临时目录）
     ├── version.test.mjs      版本号同步测试（改完自动还原仓库文件）
+    ├── variations.mjs        变异测试：故意改坏核心逻辑，验测试有效性（跑完自动还原）
     └── _harness.mjs          把 <script> 抽出来在 Node vm 里执行的加载器
 ```
 
@@ -339,11 +363,35 @@ npm run version:set 1.1.0
 分析器是单文件，改完 `project-analyzer.html` 直接刷新浏览器就能看效果，没有构建步骤。但有三件事别忘了：
 
 ```bash
-npm test          # smoke + regex + logic + scanner + version，1003 项断言
+npm test          # smoke + regex + logic + scanner + version，1000+ 项断言
 npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出来的是旧版
 ```
 
-`npm test` 里的 `logic` 会检查两份 html 是否一致，忘了 sync 会直接失败。改了 `prompts/` 也要跑 sync，smoke 会校验 `build-electron/prompts/` 副本与根字节一致。
+⚠️ 注意一个容易误判的地方：`npm test` 的**第一步就是 `sync`**，它会把两份 html 与 prompts 副本变成一致，紧接着 `logic` / `smoke` 再断言"两边一致"——这条断言此时**恒为真，抓不到任何问题**。
+
+想真正检查"有没有忘了 sync"，要**单跑**（用的是仓库里已提交的副本）：
+
+```bash
+npm run test:logic    # 校验 build-electron/project-analyzer.html 与根文件字节一致
+npm run test:smoke    # 校验 build-electron/prompts/ 与根 prompts/ 字节一致
+```
+
+## CI 会检查什么
+
+推送到 `main` / 开 PR 时跑 `.github/workflows/ci.yml`，两个 job：
+
+| 检查 | 失败意味着 |
+| --- | --- |
+| 关键文件齐全 | `package.json` / `LICENSE` / 分析器本体等 12 个核心文件有缺失，仓库结构被破坏 |
+| 副本漂移 | 改了根 `project-analyzer.html` 或 `prompts/` 却没跑 `npm run sync`，打出来的 exe 会是旧版 |
+| 树退化守卫 | 这次推送大面积删除了仓库内容（删掉 ≥40% 文件，或净删 ≥3000 行） |
+| 全量测试 | 1000+ 项断言里有失败 |
+
+「副本漂移」和「关键文件齐全」都**独立于 `npm test` 之外单独跑**，就是为了绕开上面说的那个假绿：`npm test` 会先把副本同步一致，再断言一致，那条断言永远为真。
+
+**树退化守卫的由来**：2026-09-17 有过一次以空树为基线的自动 revert，一次删光全仓 48 个文件、-14680 行（`a7b8689`），靠事后人工翻仓库才发现并恢复。现在这类事故会在推送时就被拦住。确认是有意的大批量删除时，在提交信息里写上 `ALLOW-MASS-DELETE` 即可放行。
+
+本地等价检查：`npm run verify`。
 
 ## 测试是怎么测的
 
@@ -363,7 +411,7 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 - 项目边界识别：单项目 / 多项目工作区 / 谁都不像项目，以及 9 类 manifest 的识别
 - 切换子项目：只统计自己的文件、`scope` 字段、切子项目不污染顶层结果
 - 提示词导出：五个段落齐全、勾选状态影响输出、全不选时有兜底文案
-- 历史快照：分析成功自动存 localStorage，回看列表 / 删除 / 重建
+- 历史快照：分析成功自动存 localStorage（上限 20 条），可回看详情 / 删除单条 / 清空全部
 - 可视化 HTML 报告导出：独立 HTML 文件含评级 / 亮点 / 阶段 / 产物 / 崩溃 / 建议，支持对比模式
 - 崩溃日志扫描：11 类错误模式（Lua / Python / JS / Java / Go / Rust / 通用 FATAL），严重度排序，有崩溃时评级扣分
 - 总体评级与工程亮点：A/B/C/D 四档 + 分项明细 + 亮点清单（从已有数据反向展示）
@@ -375,6 +423,8 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 - **版本号同步**：合法号三处（实际四处）都改到、非法号被拒且文件零改动、幂等重设不报错、替换只动 `APP_VERSION` 声明不动正文其它 `1.0.0`、`devDependencies` 不被波及。这个测试会真实改写仓库文件，跑完自动按字节还原，不会污染工作区
 
 这套测试用变异测试验过有效性：故意把判定分支、噪声正则、类型识别、`neg` 语义、优先级排序、`callAI` 降级、记忆容量、占位符注入、`parseAIJSON` strip、`buildDataSummary` 字段、`crashPenalty` 符号、`exportHTMLReportData` 返回值、`buildHighlights` 阈值这几处分别改坏，全部被抓到。
+
+其中 5 个变异体固化在 `tests/variations.mjs` 里，随时可以重跑一遍验证测试仍然有效（跑完自动按字节还原 `project-analyzer.html`）：`npm run test:variations`。
 
 ## 已知问题与路线图
 
@@ -416,9 +466,20 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 
 ## 它需要什么
 
-- **Windows**，装了 Edge 或 Chrome（任意一个就行）
-- 打包 exe 的话还需要 Node.js
-- AI 辅助功能需要自备 OpenAI 兼容 API key（DeepSeek / 通义 / Kimi 等都行）
+**打开分析器：什么都不用装。** 双击 `project-analyzer.html` 就行 —— Windows / macOS / Linux 都可以，浏览器用 Edge、Chrome、Firefox、Safari 任意一个都能跑。
+
+> 目录是用浏览器原生的 `webkitdirectory` 读的，**不是 Chrome 独占的 File System Access API**，所以换浏览器也能用。整个过程纯本地，不联网、不上传。
+
+**只有两种情况需要额外准备：**
+
+- **想分析几万文件的大目录**
+  浏览器版超过 8000 个文件会提示，并且会明显变慢（浏览器自身限制）。
+  Windows 用户可以双击 `run.bat` 走本机 Electron 扫描（需已装 Node.js + Electron；它是逐层遍历、不进入噪音目录，深度 8 层 / 3 万文件封顶）。
+  macOS / Linux 目前没有对应的一键脚本，建议先把目录选到更深一层的子项目再分析。
+- **想用 AI 辅助功能**
+  自备 OpenAI 兼容 API key（DeepSeek / 通义 / Kimi，本地的 Ollama / LM Studio 同理）。
+
+**只有「打包成独立 exe」这一步限 Windows x64**（双击 `build-exe-electron.bat`，需要 Node.js）。分析功能本身不挑系统，挑系统的只有打包。
 
 ## 常见问题
 
@@ -434,6 +495,9 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 
 那是 `userData` 路径共享导致的——见上面「exe 版的数据存哪」。重新打包后的 exe 会用 exe 同级 `.data\` 子目录，旧残留清掉即可（关掉所有 exe → 资源管理器粘 `%APPDATA%\project-analyzer` 回车 → 删整个文件夹）。
 
+> ⚠️ **分发 exe 给别人时，只拷 exe 单个文件，不要整个文件夹。**
+> `.data\` 里存着你自己填的 **API key（明文）** 和 AI 记忆记录。`.gitignore` 能挡住它进仓库，但挡不住你顺手把整个目录压缩发出去。要分享就只发 `project-analyzer-<版本>.exe` 那一个文件；`build-electron/.data/` 只想删就直接删，下次运行会重建。
+
 **打包产物占地方**
 
 `build-electron/dist-out/` 和 `build-electron/node_modules/` 都是可以删的，删了重新打包会再生成。或者双击 `clean-build.bat` 一键清。
@@ -443,3 +507,9 @@ npm run sync      # 同步根 html + prompts/ 到 build-electron/，否则打出
 桌面版和独立 exe 都用的是 `assets/icon.ico`。
 
 如果你想换配色或重画，改 `assets/make-icon.py` 最上面几个颜色常量，然后双击/运行这个 Python 脚本即可重新生成 `icon.ico` 和 `icon.png`。
+
+## 开源协议
+
+本项目基于 [MIT License](LICENSE) 发布，Copyright (c) 2026 KBrown102。
+
+简单说：你可以自由使用、修改、分发，包括商用，只要保留版权声明和许可声明。软件按「原样」提供，不附带任何担保。

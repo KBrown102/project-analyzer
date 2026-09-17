@@ -7,7 +7,38 @@ on:
     branches: [main, master]
 
 jobs:
-  smoke:
+  # 结构与副本完整性。这两项都必须在 npm test 之前独立跑：
+  # npm test 的第一步（sync-electron）会把副本改成与源一致，
+  # 之后所有「两份一致」的断言都恒真，漂移类事故测不出来。
+  integrity:
+    name: 结构与副本完整性
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 树退化守卫要能读到 before 那个提交
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 关键文件齐全
+        run: node scripts/guard-tree.mjs --files
+
+      - name: 副本漂移（未同步状态下的真实一致性）
+        run: node scripts/sync-electron.mjs --check
+
+      - name: 树退化守卫
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: node scripts/guard-tree.mjs --tree "$BEFORE" "$AFTER"
+
+  test:
+    name: 测试
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,5 +49,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run tests
+      # 零依赖项目，不需要 npm install
+      - name: 运行全部测试
         run: npm test

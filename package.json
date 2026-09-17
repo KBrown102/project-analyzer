@@ -3,6 +3,10 @@
   "version": "1.0.2",
   "description": "项目结构分析器 - 单文件零依赖 HTML 工具，按项目形态分析本地目录并对比",
   "private": true,
+  "author": "KBrown102",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node scripts/sync-electron.mjs && node tests/smoke.test.mjs && node tests/regex.test.mjs && node tests/logic.test.mjs && node tests/scanner.test.mjs && node tests/version.test.mjs",
     "test:smoke": "node tests/smoke.test.mjs",
@@ -10,7 +14,11 @@
     "test:logic": "node tests/logic.test.mjs",
     "test:scanner": "node tests/scanner.test.mjs",
     "test:version": "node tests/version.test.mjs",
+    "test:variations": "node tests/variations.mjs",
     "sync": "node scripts/sync-electron.mjs",
+    "sync:check": "node scripts/sync-electron.mjs --check",
+    "guard": "node scripts/guard-tree.mjs --files",
+    "verify": "npm run guard && npm run sync:check && npm test",
     "version:set": "node scripts/set-version.mjs"
   },
   "license": "MIT"
